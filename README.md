@@ -18,11 +18,36 @@ make install
 
 The first `make install` runs `npm ci` at the repo root (Husky) and in `backend/` and `frontend/`. Frontend tests use Puppeteer’s Chromium when `CHROME_BIN` is unset; the browser is downloaded on first `npm install` in `frontend/`.
 
-Run APIs:
+Run APIs (MongoDB must be reachable; copy `backend/.env.example` → `backend/.env`):
 
 ```bash
 cd backend && npm run start:dev
 ```
+
+Smoke-test PAT + Mongo against the live Airtable API (uses `backend/.env`, does not print your token):
+
+```bash
+cd backend && npm run test:airtable
+```
+
+API base path: **`/api`**.
+
+### Part A — Airtable (implemented in `backend/src/airtable/`)
+
+**Authentication:** Airtable has deprecated legacy API keys. Prefer a **[personal access token](https://airtable.com/create/tokens)** (`AIRTABLE_PERSONAL_ACCESS_TOKEN` in `backend/.env`); the API uses `Authorization: Bearer <token>` the same way as an OAuth access token. If a PAT is set, it **always** wins over any stored OAuth tokens. OAuth routes remain available only when you **omit** the PAT (integrations at [airtable.com/create/oauth](https://airtable.com/create/oauth)).
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/airtable/oauth/authorization-url` | JSON `{ authorizationUrl, state }` (400 if PAT is configured) |
+| `GET /api/airtable/oauth/login` | 302 to Airtable consent (400 if PAT is configured) |
+| `GET /api/airtable/oauth/callback` | OAuth redirect URI (must match integration settings) |
+| `GET /api/airtable/oauth/status` | `{ connected, auth: 'pat' \| 'oauth' \| 'none' }` |
+| `GET /api/airtable/oauth/refresh` | OAuth refresh only (400 if PAT is configured) |
+| `POST /api/airtable/sync` | Full sync: paginated `GET /v0/meta/bases`, per-base `.../tables`, per-table records (`pageSize=100` + `offset`), and `GET /v0/users` |
+
+**MongoDB collections:** `airtable_oauth_tokens`, `airtable_oauth_state` (TTL), `airtable_bases_pages`, `airtable_tables_pages`, `airtable_records_pages`, `airtable_users_pages` (each stored document is one **API response page**).
+
+Give the PAT the scopes your sync needs (e.g. read schema + records). The **`/v0/users`** call may still fail on some plans; the sync completes and writes an error payload into `airtable_users_pages` when that happens.
 
 Run UI:
 
@@ -34,9 +59,9 @@ cd frontend && npm start
 
 | Target        | Description                                      |
 |---------------|--------------------------------------------------|
-| `make install` | `npm ci` in `backend/` and `frontend/`         |
+| `make install` | `npm ci` at repo root + `backend/` + `frontend/` |
 | `make lint`    | ESLint backend + `ng lint` frontend             |
-| `make lint-fix`| ESLint with `--fix` on backend only             |
+| `make lint-fix`| ESLint `--fix` (backend) + `ng lint --fix` (frontend) |
 | `make test`    | Jest (backend) + Karma headless (frontend)      |
 | `make build`   | Production builds for both apps                 |
 | `make clean`   | Remove `dist/` and coverage artifacts           |
@@ -75,9 +100,8 @@ fc-task/
 
 ## Next implementation steps (task brief)
 
-1. **Part A:** Airtable OAuth; sync `/meta/bases`, `/meta/bases/:id/tables`, `/:baseId/:tableId` (paginated), `/v0/users` into MongoDB collections.
-2. **Part B:** Session cookies + `/readRowActivitiesAndComments` HTML parsing for Assignee/Status changes; MFA from UI; cookie validity checks.
-3. **Part C:** Material UI with integration/entity dropdowns, AG Grid with dynamic columns, quick filter/search, column sort/filter.
+1. **Part B:** Session cookies + `/readRowActivitiesAndComments` HTML parsing for Assignee/Status changes; MFA from UI; cookie validity checks.
+2. **Part C:** Material UI with integration/entity dropdowns, AG Grid with dynamic columns, quick filter/search, column sort/filter.
 
 ## License
 
