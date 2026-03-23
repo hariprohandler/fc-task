@@ -1,0 +1,17 @@
+{
+  "name": "fc-task",
+  "private": true,
+  "description": "Airtable integration — backend (NestJS) + frontend (Angular 19)",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "prepare": "husky",
+    "lint": "make lint",
+    "test": "make test",
+    "build": "make build"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}
