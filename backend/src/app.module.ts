@@ -5,6 +5,7 @@ import { AirtableModule } from './airtable/airtable.module';
 import airtableConfig from './airtable/airtable.config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { RawDataModule } from './raw-data/raw-data.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { AppService } from './app.service';
       process.env.MONGODB_URI ?? 'mongodb://127.0.0.1:27017/fc_task',
     ),
     AirtableModule,
+    RawDataModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -150,7 +150,8 @@ export class AirtableWebSessionService {
   }
 
   /**
-   * Step 1: email + password (from body or env). Returns MFA challenge if Airtable asks for a code.
+   * Step 1: Airtable’s email + password form only (not “Sign in with Google” / SSO — use setCookieHeader for that).
+   * Returns MFA challenge if Airtable asks for a code.
    */
   async beginWebLogin(body: {
     email?: string;

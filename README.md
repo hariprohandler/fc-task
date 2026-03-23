@@ -100,14 +100,18 @@ fc-task/
 
 ### Part B — Revision history (web cookies + HTML)
 
-After `POST /api/airtable/sync`, record IDs live in Mongo (`airtable_records_pages`). Revision history uses **Airtable web** cookies (not the PAT/OAuth API token). Install Chromium once: `cd backend && npx playwright install chromium`.
+After `POST /api/airtable/sync`, record IDs live in Mongo (`airtable_records_pages`). Revision history uses **Airtable web** cookies (not the PAT/OAuth API token).
+
+**If you sign in with Google (or Apple / SSO):** use **`POST /api/airtable/web-session/cookies`** (or **Save cookies** on `/airtable-session`) — log into airtable.com in a normal browser, copy the **`Cookie`** header from DevTools → Network, paste it here. Automated Playwright login does **not** run Google’s OAuth flow; it only targets Airtable’s own email+password form.
+
+**If your Airtable account uses email + password on Airtable’s login page:** optional Playwright automation (`login/begin`, `login/complete`). Install Chromium once: `cd backend && npx playwright install chromium`.
 
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/airtable/web-session/status` | Whether a cookie header is stored + last validation |
-| `POST /api/airtable/web-session/cookies` | Body `{ cookieHeader }` — paste from browser DevTools |
+| `POST /api/airtable/web-session/cookies` | Body `{ cookieHeader }` — **primary path for Google/SSO** (paste from DevTools) |
 | `POST /api/airtable/web-session/validate` | Body `{}` for light check, or `{ sample: { baseId, tableId, rowId } }` to POST the revision endpoint once |
-| `POST /api/airtable/web-session/login/begin` | Body optional `{ email, password }` (else uses `AIRTABLE_WEB_*` env). Returns `{ mfaRequired, sessionKey }` when MFA is needed |
+| `POST /api/airtable/web-session/login/begin` | **Email/password on Airtable only** — body optional `{ email, password }` (else `AIRTABLE_WEB_*` env). Returns `{ mfaRequired, sessionKey }` when MFA is needed |
 | `POST /api/airtable/web-session/login/complete` | Body `{ sessionKey, mfaCode }` after MFA |
 | `POST /api/airtable/revision/sync` | Body optional `{ baseId?, tableId?, maxRecords?, delayMs? }` — fetches HTML per record, parses **Assignee** and **Status** only, upserts `airtable_revision_entries` |
 | `GET /api/airtable/revision/entries` | Query `issueId`, `baseId`, `limit` |
@@ -116,11 +120,21 @@ Configure `AIRTABLE_REVISION_HISTORY_PATH_TEMPLATE` and `AIRTABLE_REVISION_POST_
 
 Jest bulk test: `npm test -- --testPathPatterns=airtable-revision` (200 mocked record fetches).
 
-The Angular app includes a small **Airtable web session** form (MFA + validation); `ng serve` proxies `/api` to `http://localhost:3000`.
+The Angular app serves **Airtable web session** at **`/airtable-session`** (MFA + validation). `ng serve` proxies `/api` to `http://localhost:3000`.
+
+### Part C — Raw Data UI (`frontend/src/app/raw-data/`)
+
+Open **`http://localhost:4200`**: **Active integration** defaults to **Airtable**; **Entity** lists allowed Mongo collections (sync pages, revision entries, web session). Click **Load grid** to fetch up to 8k documents (then use the **Search** box for quick filter, **column menu (⋮) → Filter tab** or the header filter icon for per-column filters, plus **sorting** and **pagination**). The grid uses AG Grid’s **legacy** column menu so `filterMenuTab` is available (the default `new` menu ignores tab config). Columns are built dynamically from the union of top-level fields (nested values are JSON strings).
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/raw-data/integrations` | e.g. `[{ id: airtable, label: Airtable }]` |
+| `GET /api/raw-data/entities?integrationId=airtable` | `{ entities: { rawEntities, processedEntities } }` — sync API pages vs processed (e.g. `processed_changelog`) |
+| `GET /api/raw-data/rows?integrationId=airtable&collection=…` | `{ fields, rows, totalInDb, truncated }` |
 
 ## Next implementation steps (task brief)
 
-1. **Part C:** Material UI with integration/entity dropdowns, AG Grid with dynamic columns, quick filter/search, column sort/filter.
+1. Optional hardening: server-side search, auth on raw-data routes, finer-grained collection ACLs.
 
 ## License
 

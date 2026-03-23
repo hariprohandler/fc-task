@@ -1,0 +1,134 @@
+<div class="page">
+  <header class="page-header">
+    <span class="brand">Raw Data</span>
+    <div class="header-actions">
+      <button mat-flat-button color="primary" type="button" (click)="newGrid()">
+        New Grid
+      </button>
+      <button
+        mat-flat-button
+        color="primary"
+        type="button"
+        (click)="newGlobalSearchGrid()"
+      >
+        New Global Search Grid
+      </button>
+    </div>
+    <nav class="header-nav">
+      <a routerLink="/logs">Raw Data Logs</a>
+      <span class="nav-sep">·</span>
+      <a routerLink="/airtable-session">Airtable session</a>
+    </nav>
+  </header>
+
+  <section class="filter-bar">
+    <mat-form-field appearance="outline" class="fld fld-integration">
+      <mat-label>Active Integrations</mat-label>
+      <mat-select
+        [(ngModel)]="selectedIntegrationId"
+        (ngModelChange)="onIntegrationChange()"
+      >
+        @for (i of integrations; track i.id) {
+          <mat-option [value]="i.id">{{ i.label }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="fld fld-entity">
+      <mat-label>Entity</mat-label>
+      <mat-select [(ngModel)]="selectedEntityId">
+        @for (e of rawEntities; track e.id) {
+          <mat-option [value]="e.id">{{ e.label }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="fld fld-processed">
+      <mat-label>Processed Entity</mat-label>
+      <mat-select [(ngModel)]="selectedProcessedEntityId">
+        <mat-option value="">—</mat-option>
+        @for (e of processedEntities; track e.id) {
+          <mat-option [value]="e.id">{{ e.label }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="fld fld-search">
+      <mat-label>Search</mat-label>
+      <input
+        #searchInput
+        matInput
+        [(ngModel)]="searchText"
+        (ngModelChange)="onSearchInput()"
+        placeholder="Keyword in grid"
+      />
+      <mat-icon matSuffix>search</mat-icon>
+    </mat-form-field>
+
+    <button
+      mat-flat-button
+      type="button"
+      class="btn-delete-grid"
+      (click)="deleteGrid()"
+    >
+      Delete Grid
+    </button>
+
+    <button
+      mat-flat-button
+      color="primary"
+      type="button"
+      class="btn-load"
+      [disabled]="!effectiveCollectionId || loading"
+      (click)="refreshGrid()"
+    >
+      {{ loading ? 'Loading…' : 'Load grid' }}
+    </button>
+  </section>
+
+  @if (error) {
+    <div class="error-banner">{{ error }}</div>
+  }
+
+  @if (statusLine) {
+    <div class="status-line">{{ statusLine }}</div>
+  }
+
+  <div class="grid-card">
+    <div class="grid-split">
+      <div class="ag-theme-quartz grid-main">
+        <ag-grid-angular
+          class="grid-inner"
+          [rowData]="rowData"
+          [columnDefs]="columnDefs"
+          [defaultColDef]="defaultColDef"
+          [gridOptions]="gridOptions"
+          (gridReady)="onGridReady($event)"
+        />
+      </div>
+      @if (dataFields.length > 0) {
+        <aside class="columns-panel" aria-label="Column visibility">
+          <div class="columns-body">
+            @for (f of dataFields; track f) {
+              <mat-checkbox
+                class="col-check"
+                [checked]="columnVisibility[f]"
+                (change)="onColumnToggle(f, $event.checked)"
+              >
+                {{ f }}
+              </mat-checkbox>
+            }
+          </div>
+          <div class="columns-edge-tab">Columns</div>
+        </aside>
+      }
+    </div>
+    <footer class="grid-footer">
+      <span class="footer-left">{{ selectedRowsLabel() }}</span>
+      <span class="footer-hint"
+        >Per-column filter: column menu (⋮) → <strong>Filter</strong> tab, or the
+        filter icon in the header. Quick search: Search box.</span
+      >
+    </footer>
+  </div>
+</div>

@@ -5,6 +5,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatDividerModule } from '@angular/material/divider';
 
 @Component({
   selector: 'app-airtable-web-session-panel',
@@ -15,27 +16,58 @@ import { MatInputModule } from '@angular/material/input';
     MatFormFieldModule,
     MatInputModule,
     MatButtonModule,
+    MatDividerModule,
   ],
   template: `
     <mat-card class="panel">
       <mat-card-header>
         <mat-card-title>Airtable web session</mat-card-title>
         <mat-card-subtitle
-          >Browser cookies for revision history (MFA supported)</mat-card-subtitle
+          >Browser cookies for revision history (not the API PAT)</mat-card-subtitle
         >
       </mat-card-header>
       <mat-card-content>
         <p class="hint">
-          Uses <code>/api/airtable/web-session/*</code> via dev proxy. Backend must run on
-          port 3000 with Playwright + Chromium installed for automated login.
+          Uses <code>/api/airtable/web-session/*</code> via dev proxy (backend on port 3000).
+        </p>
+
+        <h3 class="sub primary-path">Google, Apple, or SSO sign-in</h3>
+        <p class="hint">
+          Airtable’s Google login happens on Google’s site, so this app cannot drive that flow
+          with a password field. Sign in to
+          <strong>airtable.com</strong> in Chrome, open DevTools → Network → any request to
+          airtable.com → copy the full <strong>Cookie</strong> request header, then paste below.
+        </p>
+        <mat-form-field appearance="outline" class="full">
+          <mat-label>Cookie header (from DevTools)</mat-label>
+          <textarea
+            matInput
+            rows="4"
+            [(ngModel)]="cookieHeader"
+            placeholder="brw=…; __Host-airtable-session=…"
+          ></textarea>
+        </mat-form-field>
+        <div class="row">
+          <button mat-flat-button color="primary" type="button" (click)="saveCookies()">
+            Save cookies
+          </button>
+        </div>
+
+        <mat-divider class="divider" />
+
+        <h3 class="sub">Automated login (Airtable email + password only)</h3>
+        <p class="hint">
+          Optional Playwright flow for accounts that sign in with an <strong>email and password
+          on Airtable’s own form</strong> (not “Continue with Google”). Requires
+          <code>npx playwright install chromium</code> on the server.
         </p>
 
         <mat-form-field appearance="outline" class="full">
-          <mat-label>Email (optional if set in backend .env)</mat-label>
+          <mat-label>Email (or set AIRTABLE_WEB_LOGIN_EMAIL in backend .env)</mat-label>
           <input matInput type="email" [(ngModel)]="email" autocomplete="username" />
         </mat-form-field>
         <mat-form-field appearance="outline" class="full">
-          <mat-label>Password (optional if set in backend .env)</mat-label>
+          <mat-label>Password (or set AIRTABLE_WEB_LOGIN_PASSWORD in backend .env)</mat-label>
           <input
             matInput
             type="password"
@@ -45,13 +77,13 @@ import { MatInputModule } from '@angular/material/input';
         </mat-form-field>
 
         <div class="row">
-          <button mat-flat-button color="primary" type="button" (click)="beginLogin()">
-            Begin login
+          <button mat-stroked-button type="button" (click)="beginLogin()">
+            Begin login (Playwright)
           </button>
         </div>
 
         <mat-form-field appearance="outline" class="full">
-          <mat-label>Session key (from Begin login when MFA required)</mat-label>
+          <mat-label>Session key (only if MFA step returned one)</mat-label>
           <input matInput [(ngModel)]="sessionKey" />
         </mat-form-field>
         <mat-form-field appearance="outline" class="full">
@@ -63,6 +95,8 @@ import { MatInputModule } from '@angular/material/input';
             Complete login (MFA)
           </button>
         </div>
+
+        <mat-divider class="divider" />
 
         <h3 class="sub">Validate cookies</h3>
         <mat-form-field appearance="outline" class="full">
@@ -116,6 +150,17 @@ import { MatInputModule } from '@angular/material/input';
         font-size: 1rem;
         font-weight: 500;
       }
+      .sub.primary-path {
+        margin-top: 0.5rem;
+        color: #1565c0;
+      }
+      .divider {
+        margin: 1.25rem 0;
+      }
+      textarea {
+        font-family: monospace;
+        font-size: 12px;
+      }
       .out {
         margin-top: 1rem;
         padding: 0.75rem;
@@ -131,6 +176,7 @@ import { MatInputModule } from '@angular/material/input';
 export class AirtableWebSessionPanelComponent {
   private readonly http = inject(HttpClient);
 
+  cookieHeader = '';
   email = '';
   password = '';
   mfaCode = '';
@@ -139,6 +185,21 @@ export class AirtableWebSessionPanelComponent {
   sampleTableId = '';
   sampleRowId = '';
   message = '';
+
+  saveCookies(): void {
+    this.http
+      .post<unknown>('/api/airtable/web-session/cookies', {
+        cookieHeader: this.cookieHeader,
+      })
+      .subscribe({
+        next: (res) => {
+          this.message = JSON.stringify(res, null, 2);
+        },
+        error: (err) => {
+          this.message = this.formatErr(err);
+        },
+      });
+  }
 
   beginLogin(): void {
     this.http
