@@ -98,10 +98,29 @@ fc-task/
 └── frontend/             # Angular — AG Grid “raw data” style UI (Part C)
 ```
 
+### Part B — Revision history (web cookies + HTML)
+
+After `POST /api/airtable/sync`, record IDs live in Mongo (`airtable_records_pages`). Revision history uses **Airtable web** cookies (not the PAT/OAuth API token). Install Chromium once: `cd backend && npx playwright install chromium`.
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/airtable/web-session/status` | Whether a cookie header is stored + last validation |
+| `POST /api/airtable/web-session/cookies` | Body `{ cookieHeader }` — paste from browser DevTools |
+| `POST /api/airtable/web-session/validate` | Body `{}` for light check, or `{ sample: { baseId, tableId, rowId } }` to POST the revision endpoint once |
+| `POST /api/airtable/web-session/login/begin` | Body optional `{ email, password }` (else uses `AIRTABLE_WEB_*` env). Returns `{ mfaRequired, sessionKey }` when MFA is needed |
+| `POST /api/airtable/web-session/login/complete` | Body `{ sessionKey, mfaCode }` after MFA |
+| `POST /api/airtable/revision/sync` | Body optional `{ baseId?, tableId?, maxRecords?, delayMs? }` — fetches HTML per record, parses **Assignee** and **Status** only, upserts `airtable_revision_entries` |
+| `GET /api/airtable/revision/entries` | Query `issueId`, `baseId`, `limit` |
+
+Configure `AIRTABLE_REVISION_HISTORY_PATH_TEMPLATE` and `AIRTABLE_REVISION_POST_BODY_TEMPLATE` to match what you see in the browser Network tab for `readRowActivitiesAndComments`. Override DOM selectors with `AIRTABLE_REVISION_HTML_SELECTORS` (JSON) if the default `[data-revision-entry]` fixture shape does not match production HTML.
+
+Jest bulk test: `npm test -- --testPathPatterns=airtable-revision` (200 mocked record fetches).
+
+The Angular app includes a small **Airtable web session** form (MFA + validation); `ng serve` proxies `/api` to `http://localhost:3000`.
+
 ## Next implementation steps (task brief)
 
-1. **Part B:** Session cookies + `/readRowActivitiesAndComments` HTML parsing for Assignee/Status changes; MFA from UI; cookie validity checks.
-2. **Part C:** Material UI with integration/entity dropdowns, AG Grid with dynamic columns, quick filter/search, column sort/filter.
+1. **Part C:** Material UI with integration/entity dropdowns, AG Grid with dynamic columns, quick filter/search, column sort/filter.
 
 ## License
 
