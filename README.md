@@ -2,6 +2,12 @@
 
 Two-app workspace: **NestJS** API in `backend/`, **Angular 19** UI in `frontend/`.
 
+## Full Documentation
+
+For a single consolidated technical document (architecture, data flow, code structure, APIs, runbook, troubleshooting), see:
+
+- `SYSTEM_DOCUMENTATION.md`
+
 ## Requirements
 
 - **Node.js 22** (use [nvm](https://github.com/nvm-sh/nvm): `nvm use` reads `.nvmrc`)
