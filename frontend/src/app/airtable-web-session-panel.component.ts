@@ -1,4 +1,3 @@
-import { HttpClient } from '@angular/common/http';
 import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -6,6 +5,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatDividerModule } from '@angular/material/divider';
+import { AirtableSessionApiService } from './services/airtable-session-api.service';
 
 @Component({
   selector: 'app-airtable-web-session-panel',
@@ -174,7 +174,7 @@ import { MatDividerModule } from '@angular/material/divider';
   ],
 })
 export class AirtableWebSessionPanelComponent {
-  private readonly http = inject(HttpClient);
+  private readonly sessionApi = inject(AirtableSessionApiService);
 
   cookieHeader = '';
   email = '';
@@ -187,10 +187,8 @@ export class AirtableWebSessionPanelComponent {
   message = '';
 
   saveCookies(): void {
-    this.http
-      .post<unknown>('/api/airtable/web-session/cookies', {
-        cookieHeader: this.cookieHeader,
-      })
+    this.sessionApi
+      .saveCookies(this.cookieHeader)
       .subscribe({
         next: (res) => {
           this.message = JSON.stringify(res, null, 2);
@@ -202,11 +200,8 @@ export class AirtableWebSessionPanelComponent {
   }
 
   beginLogin(): void {
-    this.http
-      .post<unknown>('/api/airtable/web-session/login/begin', {
-        email: this.email || undefined,
-        password: this.password || undefined,
-      })
+    this.sessionApi
+      .beginLogin(this.email, this.password)
       .subscribe({
         next: (res) => {
           this.message = JSON.stringify(res, null, 2);
@@ -222,11 +217,8 @@ export class AirtableWebSessionPanelComponent {
   }
 
   completeLogin(): void {
-    this.http
-      .post<unknown>('/api/airtable/web-session/login/complete', {
-        sessionKey: this.sessionKey,
-        mfaCode: this.mfaCode,
-      })
+    this.sessionApi
+      .completeLogin(this.sessionKey, this.mfaCode)
       .subscribe({
         next: (res) => {
           this.message = JSON.stringify(res, null, 2);
@@ -238,7 +230,7 @@ export class AirtableWebSessionPanelComponent {
   }
 
   validateLight(): void {
-    this.http.post<unknown>('/api/airtable/web-session/validate', {}).subscribe({
+    this.sessionApi.validateLight().subscribe({
       next: (res) => {
         this.message = JSON.stringify(res, null, 2);
       },
@@ -249,13 +241,11 @@ export class AirtableWebSessionPanelComponent {
   }
 
   validateStrong(): void {
-    this.http
-      .post<unknown>('/api/airtable/web-session/validate', {
-        sample: {
-          baseId: this.sampleBaseId,
-          tableId: this.sampleTableId,
-          rowId: this.sampleRowId,
-        },
+    this.sessionApi
+      .validateStrong({
+        baseId: this.sampleBaseId,
+        tableId: this.sampleTableId,
+        rowId: this.sampleRowId,
       })
       .subscribe({
         next: (res) => {

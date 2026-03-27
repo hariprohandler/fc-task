@@ -1,4 +1,3 @@
-import { HttpClient } from '@angular/common/http';
 import {
   ChangeDetectorRef,
   Component,
@@ -22,32 +21,11 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-
-interface IntegrationDto {
-  id: string;
-  label: string;
-}
-
-interface EntityDto {
-  id: string;
-  label: string;
-}
-
-interface EntitiesResponse {
-  entities: {
-    rawEntities: EntityDto[];
-    processedEntities: EntityDto[];
-  };
-}
-
-interface RowsResponse {
-  fields: string[];
-  rows: Record<string, string>[];
-  totalInDb: number;
-  truncated: boolean;
-  collection: string;
-  maxFetched: number;
-}
+import {
+  EntityDto,
+  IntegrationDto,
+  RawDataApiService,
+} from '../services/raw-data-api.service';
 
 @Component({
   selector: 'app-raw-data',
@@ -68,7 +46,7 @@ interface RowsResponse {
   styleUrl: './raw-data.component.scss',
 })
 export class RawDataComponent implements OnInit {
-  private readonly http = inject(HttpClient);
+  private readonly rawDataApi = inject(RawDataApiService);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly snackBar = inject(MatSnackBar);
 
@@ -150,8 +128,8 @@ export class RawDataComponent implements OnInit {
   }
 
   loadIntegrations(): void {
-    this.http
-      .get<{ integrations: IntegrationDto[] }>('/api/raw-data/integrations')
+    this.rawDataApi
+      .integrations()
       .subscribe({
         next: (res) => {
           this.integrations = res.integrations ?? [];
@@ -170,10 +148,8 @@ export class RawDataComponent implements OnInit {
     if (!this.selectedIntegrationId) {
       return;
     }
-    this.http
-      .get<EntitiesResponse>('/api/raw-data/entities', {
-        params: { integrationId: this.selectedIntegrationId },
-      })
+    this.rawDataApi
+      .entities(this.selectedIntegrationId)
       .subscribe({
         next: (res) => {
           const e = res.entities;
@@ -232,13 +208,8 @@ export class RawDataComponent implements OnInit {
     }
     this.loading = true;
     this.error = null;
-    this.http
-      .get<RowsResponse>('/api/raw-data/rows', {
-        params: {
-          integrationId: this.selectedIntegrationId,
-          collection: coll,
-        },
-      })
+    this.rawDataApi
+      .rows(this.selectedIntegrationId, coll)
       .subscribe({
         next: (res) => {
           this.loading = false;

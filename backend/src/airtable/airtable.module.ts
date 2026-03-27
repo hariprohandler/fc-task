@@ -1,14 +1,20 @@
-import { Module } from '@nestjs/common';
+import {
+  MiddlewareConsumer,
+  Module,
+  NestModule,
+  RequestMethod,
+} from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { AirtableApiService } from './airtable-api.service';
-import { AirtableOAuthService } from './airtable-oauth.service';
-import { AirtableRevisionSyncService } from './airtable-revision-sync.service';
-import { AirtableSyncService } from './airtable-sync.service';
-import { AirtableWebSessionService } from './airtable-web-session.service';
-import { AirtableOAuthController } from './oauth.controller';
-import { AirtableRevisionController } from './revision.controller';
-import { AirtableSyncController } from './sync.controller';
-import { AirtableWebSessionController } from './web-session.controller';
+import { AirtableRequestMiddleware } from './middleware/airtable-request.middleware';
+import { AirtableOAuthController } from './routes/oauth.controller';
+import { AirtableRevisionController } from './routes/revision.controller';
+import { AirtableSyncController } from './routes/sync.controller';
+import { AirtableWebSessionController } from './routes/web-session.controller';
+import { AirtableApiService } from './services/airtable-api.service';
+import { AirtableOAuthService } from './services/airtable-oauth.service';
+import { AirtableRevisionSyncService } from './services/airtable-revision-sync.service';
+import { AirtableSyncService } from './services/airtable-sync.service';
+import { AirtableWebSessionService } from './services/airtable-web-session.service';
 import {
   AirtableBaseSyncPage,
   AirtableBaseSyncPageSchema,
@@ -87,4 +93,10 @@ import {
     AirtableRevisionSyncService,
   ],
 })
-export class AirtableModule {}
+export class AirtableModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(AirtableRequestMiddleware)
+      .forRoutes({ path: 'airtable/(.*)', method: RequestMethod.ALL });
+  }
+}

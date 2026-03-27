@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install lint lint-fix test test-ci build clean backend-install frontend-install root-install
+.PHONY: help install lint lint-fix test test-ci build clean backend-install frontend-install root-install run-backend run-frontend run
 
 help:
 	@echo "FC Task — make targets (running make with no target shows this list):"
@@ -12,6 +12,9 @@ help:
 	@echo "  make test-ci     Same as make test (alias)"
 	@echo "  make build       Production builds for backend and frontend"
 	@echo "  make clean       Remove dist/ and coverage artifacts under backend/ and frontend/"
+	@echo "  make run-backend Run NestJS API in watch mode (backend)"
+	@echo "  make run-frontend Run Angular dev server (frontend)"
+	@echo "  make run         Run backend + frontend together"
 
 # Install root (husky) + both apps (CI-friendly: npm ci when lockfiles exist)
 install: root-install backend-install frontend-install
@@ -45,3 +48,18 @@ build:
 
 clean:
 	rm -rf backend/dist backend/coverage frontend/dist frontend/coverage
+
+run-backend:
+	npm --prefix backend run start:dev
+
+run-frontend:
+	npm --prefix frontend run start
+
+# Starts backend in background and keeps frontend in foreground.
+# Ctrl+C stops both.
+run:
+	@set -e; \
+	npm --prefix backend run start:dev & \
+	BACKEND_PID=$$!; \
+	trap 'kill $$BACKEND_PID 2>/dev/null || true' INT TERM EXIT; \
+	npm --prefix frontend run start
