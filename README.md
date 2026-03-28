@@ -30,7 +30,7 @@ Run APIs (MongoDB must be reachable; copy `backend/.env.example` → `backend/.e
 cd backend && npm run start:dev
 ```
 
-Smoke-test PAT + Mongo against the live Airtable API (uses `backend/.env`, does not print your token):
+Smoke-test OAuth + Mongo against the live Airtable API (uses `backend/.env`; complete OAuth once so tokens exist in Mongo):
 
 ```bash
 cd backend && npm run test:airtable
@@ -40,20 +40,24 @@ API base path: **`/api`**.
 
 ### Part A — Airtable (implemented in `backend/src/airtable/`)
 
-**Authentication:** Airtable has deprecated legacy API keys. Prefer a **[personal access token](https://airtable.com/create/tokens)** (`AIRTABLE_PERSONAL_ACCESS_TOKEN` in `backend/.env`); the API uses `Authorization: Bearer <token>` the same way as an OAuth access token. If a PAT is set, it **always** wins over any stored OAuth tokens. OAuth routes remain available only when you **omit** the PAT (integrations at [airtable.com/create/oauth](https://airtable.com/create/oauth)).
+**Authentication:** Configure an **[OAuth integration](https://airtable.com/create/oauth)** (`AIRTABLE_OAUTH_*` in `backend/.env`). API calls use `Authorization: Bearer <access_token>` from tokens stored in Mongo after the user completes `GET /api/airtable/oauth/login` (or the SPA uses `authorization-url`).
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /api/airtable/oauth/authorization-url` | JSON `{ authorizationUrl, state }` (400 if PAT is configured) |
-| `GET /api/airtable/oauth/login` | 302 to Airtable consent (400 if PAT is configured) |
+| `GET /api/airtable/oauth/authorization-url` | JSON `{ authorizationUrl, state }` |
+| `GET /api/airtable/oauth/login` | 302 to Airtable consent |
 | `GET /api/airtable/oauth/callback` | OAuth redirect URI (must match integration settings) |
-| `GET /api/airtable/oauth/status` | `{ connected, auth: 'pat' \| 'oauth' \| 'none' }` |
-| `GET /api/airtable/oauth/refresh` | OAuth refresh only (400 if PAT is configured) |
+| `GET /api/airtable/oauth/status` | `{ connected, auth: 'oauth' \| 'none' }` |
+| `GET /api/airtable/oauth/refresh` | Rotate credentials using the stored refresh token |
 | `POST /api/airtable/sync` | Full sync: paginated `GET /v0/meta/bases`, per-base `.../tables`, per-table records (`pageSize=100` + `offset`), and `GET /v0/users` |
+| `POST /api/airtable/sync/bases` | Part A explicit sync for bases pages only |
+| `POST /api/airtable/sync/tables` | Part A explicit sync for base table metadata pages only |
+| `POST /api/airtable/sync/records` | Part A explicit sync for records pages only |
+| `POST /api/airtable/sync/users` | Part A explicit sync for users pages only |
 
 **MongoDB collections:** `airtable_oauth_tokens`, `airtable_oauth_state` (TTL), `airtable_bases_pages`, `airtable_tables_pages`, `airtable_records_pages`, `airtable_users_pages` (each stored document is one **API response page**).
 
-Give the PAT the scopes your sync needs (e.g. read schema + records). The **`/v0/users`** call may still fail on some plans; the sync completes and writes an error payload into `airtable_users_pages` when that happens.
+Enable the OAuth scopes your sync needs (e.g. read schema + records). The **`/v0/users`** call may still fail on some plans; the sync completes and writes an error payload into `airtable_users_pages` when that happens.
 
 Run UI:
 
@@ -106,7 +110,7 @@ fc-task/
 
 ### Part B — Revision history (web cookies + HTML)
 
-After `POST /api/airtable/sync`, record IDs live in Mongo (`airtable_records_pages`). Revision history uses **Airtable web** cookies (not the PAT/OAuth API token).
+After `POST /api/airtable/sync`, record IDs live in Mongo (`airtable_records_pages`). Revision history uses **Airtable web** cookies (separate from the OAuth API token).
 
 **If you sign in with Google (or Apple / SSO):** use **`POST /api/airtable/web-session/cookies`** (or **Save cookies** on `/airtable-session`) — log into airtable.com in a normal browser, copy the **`Cookie`** header from DevTools → Network, paste it here. Automated Playwright login does **not** run Google’s OAuth flow; it only targets Airtable’s own email+password form.
 
@@ -135,7 +139,7 @@ Open **`http://localhost:4200`**: **Active integration** defaults to **Airtable*
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/raw-data/integrations` | e.g. `[{ id: airtable, label: Airtable }]` |
-| `GET /api/raw-data/entities?integrationId=airtable` | `{ entities: { rawEntities, processedEntities } }` — sync API pages vs processed (e.g. `processed_changelog`) |
+| `GET /api/raw-data/entities?integrationId=airtable` | `{ entities: { rawEntities, processedEntities } }` — sync API pages vs processed (`processed_changelog`) |
 | `GET /api/raw-data/rows?integrationId=airtable&collection=…` | `{ fields, rows, totalInDb, truncated }` |
 
 ## Next implementation steps (task brief)

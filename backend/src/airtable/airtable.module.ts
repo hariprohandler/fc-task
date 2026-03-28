@@ -51,6 +51,10 @@ import {
   AirtableWebSession,
   AirtableWebSessionSchema,
 } from './schemas/web-session.schema';
+import {
+  ProcessedChangelog,
+  ProcessedChangelogSchema,
+} from './schemas/processed-changelog.schema';
 
 @Module({
   imports: [
@@ -69,6 +73,10 @@ import {
       {
         name: AirtableRevisionEntry.name,
         schema: AirtableRevisionEntrySchema,
+      },
+      {
+        name: ProcessedChangelog.name,
+        schema: ProcessedChangelogSchema,
       },
     ]),
   ],

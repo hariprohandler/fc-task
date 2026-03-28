@@ -38,15 +38,6 @@ export class AirtableOAuthService {
     private readonly tokenModel: Model<AirtableOAuthTokenDocument>,
   ) {}
 
-  /** When set, all API calls use this token (Bearer). OAuth tokens are ignored. */
-  getPersonalAccessToken(): string {
-    return this.config.get<string>('airtable.personalAccessToken', '').trim();
-  }
-
-  usesPersonalAccessToken(): boolean {
-    return this.getPersonalAccessToken().length > 0;
-  }
-
   private get webHost(): string {
     return this.config.getOrThrow<string>('airtable.webHost');
   }
@@ -172,11 +163,6 @@ export class AirtableOAuthService {
   }
 
   async refreshAccessToken(): Promise<TokenExchangeResponse> {
-    if (this.usesPersonalAccessToken()) {
-      throw new UnauthorizedException(
-        'Personal access token is configured; OAuth refresh does not apply.',
-      );
-    }
     const doc = await this.tokenModel.findOne({ key: TOKEN_KEY }).exec();
     if (!doc?.refreshToken) {
       throw new UnauthorizedException(
@@ -220,18 +206,12 @@ export class AirtableOAuthService {
     return this.tokenModel.findOne({ key: TOKEN_KEY }).exec();
   }
 
-  /**
-   * Bearer token for `Authorization: Bearer …` (PAT preferred, else OAuth with refresh).
-   */
+  /** Bearer access token for `Authorization: Bearer …` (refresh when near expiry). */
   async getValidAccessToken(): Promise<string> {
-    const pat = this.getPersonalAccessToken();
-    if (pat) {
-      return pat;
-    }
     const doc = await this.getStoredToken();
     if (!doc) {
       throw new UnauthorizedException(
-        'Not connected to Airtable. Set AIRTABLE_PERSONAL_ACCESS_TOKEN or complete OAuth.',
+        'Not connected to Airtable. Complete OAuth via GET /api/airtable/oauth/login.',
       );
     }
     const skewMs = 60_000;
@@ -243,17 +223,11 @@ export class AirtableOAuthService {
   }
 
   async isConnected(): Promise<boolean> {
-    if (this.usesPersonalAccessToken()) {
-      return true;
-    }
     const doc = await this.getStoredToken();
     return !!doc?.accessToken;
   }
 
-  async authMode(): Promise<'pat' | 'oauth' | 'none'> {
-    if (this.usesPersonalAccessToken()) {
-      return 'pat';
-    }
+  async authMode(): Promise<'oauth' | 'none'> {
     const doc = await this.getStoredToken();
     return doc?.accessToken ? 'oauth' : 'none';
   }

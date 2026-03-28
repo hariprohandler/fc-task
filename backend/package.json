@@ -22,7 +22,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "test:airtable": "RUN_AIRTABLE_INTEGRATION=1 jest airtable.pat.integration.spec.ts --runInBand --testTimeout=120000"
+    "test:airtable": "RUN_AIRTABLE_INTEGRATION=1 jest airtable.integration.spec.ts --runInBand --testTimeout=120000"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

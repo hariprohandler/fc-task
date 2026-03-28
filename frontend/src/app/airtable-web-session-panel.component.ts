@@ -23,7 +23,7 @@ import { AirtableSessionApiService } from './services/airtable-session-api.servi
       <mat-card-header>
         <mat-card-title>Airtable web session</mat-card-title>
         <mat-card-subtitle
-          >Browser cookies for revision history (not the API PAT)</mat-card-subtitle
+          >Browser cookies for revision history (separate from the API OAuth token)</mat-card-subtitle
         >
       </mat-card-header>
       <mat-card-content>

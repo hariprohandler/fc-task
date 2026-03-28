@@ -25,7 +25,7 @@ export const AIRTABLE_ENTITY_COLLECTIONS: {
     category: 'raw',
   },
   {
-    name: 'airtable_revision_entries',
+    name: 'processed_changelog',
     label: 'processed_changelog',
     category: 'processed',
   },

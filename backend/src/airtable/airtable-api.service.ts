@@ -46,11 +46,7 @@ export class AirtableApiService {
         Accept: 'application/json',
       },
     });
-    if (
-      res.status === 401 &&
-      !retried &&
-      !this.oauth.usesPersonalAccessToken()
-    ) {
+    if (res.status === 401 && !retried) {
       await this.oauth.refreshAccessToken();
       return this.requestJson(path, query, true);
     }

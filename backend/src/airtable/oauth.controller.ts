@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Controller,
   Get,
   Query,
@@ -16,22 +15,12 @@ export class AirtableOAuthController {
   /** SPA: open this URL in the browser or redirect the user. */
   @Get('authorization-url')
   async authorizationUrl() {
-    if (this.oauth.usesPersonalAccessToken()) {
-      throw new BadRequestException(
-        'AIRTABLE_PERSONAL_ACCESS_TOKEN is set; API calls use the PAT. Remove it to use OAuth.',
-      );
-    }
     return this.oauth.createAuthorizationUrl();
   }
 
   /** Browser-friendly: starts OAuth (302 to Airtable). */
   @Get('login')
   async login(@Res() res: Response) {
-    if (this.oauth.usesPersonalAccessToken()) {
-      throw new BadRequestException(
-        'AIRTABLE_PERSONAL_ACCESS_TOKEN is set; API calls use the PAT. Remove it to use OAuth.',
-      );
-    }
     const { authorizationUrl } = await this.oauth.createAuthorizationUrl();
     return res.redirect(authorizationUrl);
   }
@@ -77,11 +66,6 @@ export class AirtableOAuthController {
   /** Uses the stored refresh token to rotate credentials. */
   @Get('refresh')
   async refresh() {
-    if (this.oauth.usesPersonalAccessToken()) {
-      throw new BadRequestException(
-        'Personal access token is in use; nothing to refresh.',
-      );
-    }
     try {
       await this.oauth.refreshAccessToken();
       return { ok: true };

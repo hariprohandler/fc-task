@@ -4,19 +4,23 @@ import { config as loadEnv } from 'dotenv';
 import { resolve } from 'path';
 import { AppModule } from '../app.module';
 import { AirtableApiService } from './airtable-api.service';
+import { AirtableOAuthService } from './airtable-oauth.service';
 
 /** Load backend/.env before reading process.env (Jest does not load it automatically). */
 loadEnv({ path: resolve(process.cwd(), '.env') });
 
-const canRun =
-  Boolean(process.env.MONGODB_URI) &&
-  Boolean(process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN?.trim());
+const hasOAuthClient =
+  Boolean(process.env.AIRTABLE_OAUTH_CLIENT_ID?.trim()) &&
+  Boolean(process.env.AIRTABLE_OAUTH_CLIENT_SECRET?.trim());
+
+/** OAuth client credentials; tokens must exist in Mongo after browser login. */
+const canRun = Boolean(process.env.MONGODB_URI) && hasOAuthClient;
 
 const runIntegration = process.env.RUN_AIRTABLE_INTEGRATION === '1';
 
 if (runIntegration && !canRun) {
-  describe('Airtable PAT + Mongo (integration prerequisites)', () => {
-    it('requires MONGODB_URI and AIRTABLE_PERSONAL_ACCESS_TOKEN in backend/.env', () => {
+  describe('Airtable API + Mongo (integration prerequisites)', () => {
+    it('requires MONGODB_URI and AIRTABLE_OAUTH_CLIENT_ID + AIRTABLE_OAUTH_CLIENT_SECRET in backend/.env', () => {
       expect(canRun).toBe(true);
     });
   });
@@ -24,7 +28,7 @@ if (runIntegration && !canRun) {
 
 const describeLive = runIntegration && canRun ? describe : describe.skip;
 
-describeLive('Airtable PAT + Mongo (integration)', () => {
+describeLive('Airtable API + Mongo (integration)', () => {
   let app: INestApplication;
   let api: AirtableApiService;
 
@@ -36,13 +40,21 @@ describeLive('Airtable PAT + Mongo (integration)', () => {
     app = moduleRef.createNestApplication();
     await app.init();
     api = app.get(AirtableApiService);
+
+    const oauth = app.get(AirtableOAuthService);
+    const connected = await oauth.isConnected();
+    if (!connected) {
+      throw new Error(
+        'No OAuth tokens in Mongo. Open GET /api/airtable/oauth/login in a browser once, then re-run this test.',
+      );
+    }
   }, 60_000);
 
   afterAll(async () => {
     await app?.close();
   });
 
-  it('calls GET /meta/bases with Bearer PAT and prints paginated pages', async () => {
+  it('calls GET /meta/bases with Bearer OAuth token and prints paginated pages', async () => {
     const pages = await api.listBasesPages();
 
     console.log(

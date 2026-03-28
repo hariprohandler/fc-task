@@ -3,6 +3,7 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AirtableRevisionSyncService } from './airtable-revision-sync.service';
 import { AirtableWebSessionService } from './airtable-web-session.service';
+import { ProcessedChangelog } from './schemas/processed-changelog.schema';
 import { AirtableRecordSyncPage } from './schemas/record-sync-page.schema';
 import { AirtableRevisionEntry } from './schemas/revision-entry.schema';
 
@@ -76,6 +77,12 @@ describe('AirtableRevisionSyncService bulk (200 records)', () => {
             findOneAndUpdate,
           },
         },
+        {
+          provide: getModelToken(ProcessedChangelog.name),
+          useValue: {
+            findOneAndUpdate,
+          },
+        },
       ],
     }).compile();
 
@@ -102,7 +109,7 @@ describe('AirtableRevisionSyncService bulk (200 records)', () => {
     expect(summary.recordsProcessed).toBe(200);
     expect(summary.httpCalls).toBe(200);
     expect(summary.errors).toHaveLength(0);
-    expect(findOneAndUpdate).toHaveBeenCalledTimes(200);
+    expect(findOneAndUpdate).toHaveBeenCalledTimes(400);
     expect(summary.entriesUpserted).toBe(200);
   });
 });

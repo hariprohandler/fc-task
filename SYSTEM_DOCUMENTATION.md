@@ -20,7 +20,7 @@ High-level capabilities:
 ### Backend modules
 
 - `AirtableModule` (`backend/src/airtable/`)
-  - OAuth + PAT token handling
+  - OAuth token handling
   - Airtable API pagination sync
   - Web session cookie management
   - Revision history fetching/parsing/storage
@@ -39,7 +39,7 @@ High-level capabilities:
 ## A. Airtable API Sync Flow (Part A)
 
 1. Client calls `POST /api/airtable/sync`.
-2. Backend uses PAT (preferred) or OAuth access token.
+2. Backend uses the stored OAuth access token (with refresh when needed).
 3. Backend paginates Airtable APIs:
    - bases -> tables -> records -> users
 4. Each Airtable page response is stored as one Mongo document.
@@ -93,7 +93,7 @@ Revision entry shape:
 `backend/src/airtable/`
 
 - `airtable-api.service.ts` - generic Airtable request + pagination helpers
-- `airtable-oauth.service.ts` - OAuth token lifecycle and PAT fallback
+- `airtable-oauth.service.ts` - OAuth token lifecycle (store, refresh, valid access token)
 - `airtable-sync.service.ts` - sync orchestration and Mongo writes
 - `airtable-web-session.service.ts` - cookie storage/validation and optional Playwright login
 - `airtable-revision-sync.service.ts` - revision fetch + parse + upsert loop
@@ -127,7 +127,7 @@ Other key files:
 
 Base URL: `/api`
 
-### Airtable OAuth/PAT + sync
+### Airtable OAuth + sync
 
 - `GET /airtable/oauth/authorization-url`
 - `GET /airtable/oauth/login`
@@ -159,8 +159,7 @@ Primary env file: `backend/.env`
 Important keys:
 
 - `MONGODB_URI`
-- `AIRTABLE_PERSONAL_ACCESS_TOKEN`
-- `AIRTABLE_OAUTH_*` (if using OAuth flow)
+- `AIRTABLE_OAUTH_*` (OAuth client, redirect, scopes)
 - `AIRTABLE_WEB_HOST`
 - `AIRTABLE_API_BASE`
 - `AIRTABLE_REVISION_HISTORY_PATH_TEMPLATE`

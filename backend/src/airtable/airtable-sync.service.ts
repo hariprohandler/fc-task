@@ -70,6 +70,28 @@ export type SyncSummary = {
   usersError?: string;
 };
 
+export type BasesSyncSummary = {
+  basePages: number;
+  bases: number;
+};
+
+export type TablesSyncSummary = {
+  tablePages: number;
+  bases: number;
+  tablesSynced: number;
+};
+
+export type RecordsSyncSummary = {
+  recordPages: number;
+  bases: number;
+  tablesSynced: number;
+};
+
+export type UsersSyncSummary = {
+  userPages: number;
+  usersError?: string;
+};
+
 @Injectable()
 export class AirtableSyncService {
   private readonly log = new Logger(AirtableSyncService.name);
@@ -86,15 +108,8 @@ export class AirtableSyncService {
     private readonly userPages: Model<AirtableUserSyncPageDocument>,
   ) {}
 
-  /** Full sync: replace all page collections, follow Airtable pagination everywhere. */
-  async syncAll(): Promise<SyncSummary> {
-    await Promise.all([
-      this.basePages.deleteMany({}),
-      this.tablePages.deleteMany({}),
-      this.recordPages.deleteMany({}),
-      this.userPages.deleteMany({}),
-    ]);
-
+  async syncBasesOnly(): Promise<BasesSyncSummary> {
+    await this.basePages.deleteMany({});
     const basePageDocs = await this.api.listBasesPages();
     if (basePageDocs.length > 0) {
       await this.basePages.insertMany(
@@ -104,12 +119,19 @@ export class AirtableSyncService {
         })),
       );
     }
+    return {
+      basePages: basePageDocs.length,
+      bases: collectBaseIdsFromPages(basePageDocs).length,
+    };
+  }
 
+  async syncTablesOnly(): Promise<TablesSyncSummary> {
+    await this.tablePages.deleteMany({});
+    const basePageDocs = await this.api.listBasesPages();
     const baseIds = collectBaseIdsFromPages(basePageDocs);
-    let tablePageCount = 0;
-    let recordPageCount = 0;
-    let tablesSynced = 0;
 
+    let tablePageCount = 0;
+    let tablesSynced = 0;
     for (const baseId of baseIds) {
       const tablePageList = await this.api.listTablesPages(baseId);
       tablePageCount += tablePageList.length;
@@ -122,7 +144,25 @@ export class AirtableSyncService {
           })),
         );
       }
+      tablesSynced += collectTableIdsFromPages(tablePageList).length;
+    }
 
+    return {
+      tablePages: tablePageCount,
+      bases: baseIds.length,
+      tablesSynced,
+    };
+  }
+
+  async syncRecordsOnly(): Promise<RecordsSyncSummary> {
+    await this.recordPages.deleteMany({});
+    const basePageDocs = await this.api.listBasesPages();
+    const baseIds = collectBaseIdsFromPages(basePageDocs);
+
+    let tablesSynced = 0;
+    let recordPageCount = 0;
+    for (const baseId of baseIds) {
+      const tablePageList = await this.api.listTablesPages(baseId);
       const tableIds = collectTableIdsFromPages(tablePageList);
       tablesSynced += tableIds.length;
 
@@ -141,6 +181,16 @@ export class AirtableSyncService {
         }
       }
     }
+
+    return {
+      recordPages: recordPageCount,
+      bases: baseIds.length,
+      tablesSynced,
+    };
+  }
+
+  async syncUsersOnly(): Promise<UsersSyncSummary> {
+    await this.userPages.deleteMany({});
 
     let userPageCount = 0;
     let usersError: string | undefined;
@@ -171,13 +221,26 @@ export class AirtableSyncService {
     }
 
     return {
-      basePages: basePageDocs.length,
-      tablePages: tablePageCount,
-      recordPages: recordPageCount,
       userPages: userPageCount,
-      bases: baseIds.length,
-      tablesSynced,
       usersError,
+    };
+  }
+
+  /** Full sync: replace all page collections, follow Airtable pagination everywhere. */
+  async syncAll(): Promise<SyncSummary> {
+    const bases = await this.syncBasesOnly();
+    const tables = await this.syncTablesOnly();
+    const records = await this.syncRecordsOnly();
+    const users = await this.syncUsersOnly();
+
+    return {
+      basePages: bases.basePages,
+      tablePages: tables.tablePages,
+      recordPages: records.recordPages,
+      userPages: users.userPages,
+      bases: bases.bases,
+      tablesSynced: records.tablesSynced,
+      usersError: users.usersError,
     };
   }
 }

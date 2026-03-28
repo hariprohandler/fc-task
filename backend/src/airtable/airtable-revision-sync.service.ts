@@ -13,6 +13,10 @@ import {
   AirtableRevisionEntry,
   AirtableRevisionEntryDocument,
 } from './schemas/revision-entry.schema';
+import {
+  ProcessedChangelog,
+  ProcessedChangelogDocument,
+} from './schemas/processed-changelog.schema';
 
 export type RevisionSyncOptions = {
   baseId?: string;
@@ -58,6 +62,8 @@ export class AirtableRevisionSyncService {
     private readonly recordPages: Model<AirtableRecordSyncPageDocument>,
     @InjectModel(AirtableRevisionEntry.name)
     private readonly revisions: Model<AirtableRevisionEntryDocument>,
+    @InjectModel(ProcessedChangelog.name)
+    private readonly processedChangelog: Model<ProcessedChangelogDocument>,
   ) {}
 
   private get webHost(): string {
@@ -245,6 +251,21 @@ export class AirtableRevisionSyncService {
                   authoredBy: a.originatingUserId,
                   baseId: page.baseId,
                   tableId: page.tableId,
+                },
+              },
+              { upsert: true },
+            );
+            await this.processedChangelog.findOneAndUpdate(
+              { issueId: rowId, uuid: a.activityId },
+              {
+                $set: {
+                  uuid: a.activityId,
+                  issueId: rowId,
+                  authorUuid: a.originatingUserId,
+                  created,
+                  itemsField: a.columnType,
+                  itemsFieldType: a.columnType,
+                  itemsFieldId: a.columnType,
                 },
               },
               { upsert: true },
