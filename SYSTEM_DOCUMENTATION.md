@@ -77,9 +77,9 @@ Revision entry shape:
 ## C. Raw Data UI Flow (Part C)
 
 1. UI loads integrations from `GET /api/raw-data/integrations`.
-2. UI loads entities from `GET /api/raw-data/entities?integrationId=airtable`.
-3. User picks Entity or Processed Entity and clicks **Load grid**.
-4. UI requests `GET /api/raw-data/rows?...`.
+2. UI loads entities from `GET /api/raw-data/entities?integrationId=airtable` (Airtable tables from synced base/table metadata; ids `atbl:{baseId}:{tableId}`).
+3. User picks **Table** or **Processed Entity** (`processed_changelog`) and clicks **Load grid**.
+4. UI requests `GET /api/raw-data/rows?...` with `collection` set to the virtual table id or `processed_changelog`.
 5. Backend returns:
    - `fields`: dynamic column list
    - `rows`: flattened/stringified row values
@@ -147,7 +147,7 @@ Base URL: `/api`
 
 - `GET /raw-data/integrations`
 - `GET /raw-data/entities?integrationId=airtable`
-- `GET /raw-data/rows?integrationId=airtable&collection=<name>&limit=<n>`
+- `GET /raw-data/rows?integrationId=airtable&collection=<atbl:baseId:tableId|processed_changelog>&limit=<n>`
 
 ## 7) Configuration
 

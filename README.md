@@ -124,13 +124,13 @@ The Angular app serves **Airtable web session** at **`/airtable-session`** (cook
 
 ### Part C — Raw Data UI (`frontend/src/app/raw-data/`)
 
-Open **`http://localhost:4200`**: **Active integration** defaults to **Airtable**; **Entity** lists allowed Mongo collections (sync pages, revision entries, web session). Click **Load grid** to fetch up to 8k documents (then use the **Search** box for quick filter, **column menu (⋮) → Filter tab** or the header filter icon for per-column filters, plus **sorting** and **pagination**). The grid uses AG Grid’s **legacy** column menu so `filterMenuTab` is available (the default `new` menu ignores tab config). Columns are built dynamically from the union of top-level fields (nested values are JSON strings).
+Open **`http://localhost:4200`**: **Active integration** defaults to **Airtable**; **Table** lists **Airtable tables** from the last sync (`meta/bases` + table metadata in Mongo). Click **Load grid** to fetch up to 8k **records** for that table from synced record pages (then use the **Search** box for quick filter, **column menu (⋮) → Filter tab** or the header filter icon for per-column filters, plus **sorting** and **pagination**). The grid uses AG Grid’s **legacy** column menu so `filterMenuTab` is available (the default `new` menu ignores tab config). Columns are built from record `id`, `createdTime`, and field columns (nested values are JSON strings).
 
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/raw-data/integrations` | `[{ id, label, connected }]` — Airtable only |
-| `GET /api/raw-data/entities?integrationId=airtable` | `{ entities: { rawEntities, processedEntities } }` — raw = live `airtable_*` Mongo collections (minus OAuth/state drafts); processed = `processed_changelog` only |
-| `GET /api/raw-data/rows?integrationId=airtable&collection=…` | `{ fields, rows, totalInDb, truncated }` |
+| `GET /api/raw-data/entities?integrationId=airtable` | `{ entities: { rawEntities, processedEntities } }` — raw = Airtable tables (`atbl:{baseId}:{tableId}`, label `Base › Table`); processed = `processed_changelog` |
+| `GET /api/raw-data/rows?integrationId=airtable&collection=…` | `{ fields, rows, totalInDb, truncated }` — use `collection=atbl:…` for table records from `airtable_records_pages`, or `collection=processed_changelog` |
 
 ## Next implementation steps (task brief)
 

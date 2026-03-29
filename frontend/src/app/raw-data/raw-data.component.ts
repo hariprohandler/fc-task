@@ -157,11 +157,8 @@ export class RawDataComponent implements OnInit {
           this.rawEntities = e?.rawEntities ?? [];
           this.processedEntities = e?.processedEntities ?? [];
           this.selectedEntityId = this.rawEntities[0]?.id ?? null;
-          this.selectedProcessedEntityId =
-            this.selectedIntegrationId === 'airtable' &&
-            this.processedEntities.some((p) => p.id === 'processed_changelog')
-              ? 'processed_changelog'
-              : '';
+          /** Prefer synced Airtable tables; use Processed Entity for changelog explicitly. */
+          this.selectedProcessedEntityId = '';
           this.clearGridState();
           this.error = null;
         },
@@ -188,7 +185,7 @@ export class RawDataComponent implements OnInit {
 
   newGrid(): void {
     this.clearGridState();
-    this.snackBar.open('New grid — choose Entity / Processed Entity and Load grid.', 'OK', {
+    this.snackBar.open('New grid — choose Table / Processed Entity and Load grid.', 'OK', {
       duration: 3500,
     });
   }

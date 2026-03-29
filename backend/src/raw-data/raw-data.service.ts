@@ -1,11 +1,18 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { InjectConnection } from '@nestjs/mongoose';
-import { Connection } from 'mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { Connection, Model } from 'mongoose';
+import type { AirtableRecordSyncPageDocument } from '../airtable/schemas/record-sync-page.schema';
+import { AirtableRecordSyncPage } from '../airtable/schemas/record-sync-page.schema';
+import type { AirtableBaseSyncPageDocument } from '../airtable/schemas/base-sync-page.schema';
+import { AirtableBaseSyncPage } from '../airtable/schemas/base-sync-page.schema';
+import type { AirtableTableSyncPageDocument } from '../airtable/schemas/table-sync-page.schema';
+import { AirtableTableSyncPage } from '../airtable/schemas/table-sync-page.schema';
 import {
   AIRTABLE_PROCESSED_COLLECTION,
   INTEGRATION_IDS,
   MAX_RAW_DOCUMENTS,
   RAW_DATA_COLLECTION_BLOCKLIST,
+  parseAirtableTableEntityId,
 } from './raw-data.constants';
 
 export type IntegrationListItem = {
@@ -71,28 +78,112 @@ function rowForGrid(doc: Record<string, unknown>): Record<string, string> {
 }
 
 function collectFieldNames(rows: Record<string, string>[]): string[] {
-  const keys = new Set<string>();
+  const keySet = new Set<string>();
   for (const r of rows) {
     for (const k of Object.keys(r)) {
-      keys.add(k);
+      keySet.add(k);
     }
   }
-  const list = [...keys].sort((a, b) => a.localeCompare(b));
-  const idIdx = list.indexOf('_id');
-  if (idIdx > 0) {
-    list.splice(idIdx, 1);
-    list.unshift('_id');
+  const rest = [...keySet].filter((k) => k !== 'id' && k !== '_id');
+  rest.sort((a, b) => a.localeCompare(b));
+  const out: string[] = [];
+  if (keySet.has('id')) {
+    out.push('id');
   }
-  return list;
+  if (keySet.has('_id')) {
+    out.push('_id');
+  }
+  return [...out, ...rest];
 }
 
-function collectionLabel(name: string): string {
-  return name;
+function collectBaseNamesFromPages(
+  pages: Array<{ payload: Record<string, unknown> }>,
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const { payload } of pages) {
+    const bases = payload.bases;
+    if (!Array.isArray(bases)) {
+      continue;
+    }
+    for (const b of bases as unknown[]) {
+      if (
+        b &&
+        typeof b === 'object' &&
+        'id' in b &&
+        typeof (b as { id: unknown }).id === 'string'
+      ) {
+        const id = (b as { id: string }).id;
+        const name =
+          'name' in b && (b as { name: unknown }).name != null
+            ? String((b as { name: unknown }).name)
+            : id;
+        map.set(id, name);
+      }
+    }
+  }
+  return map;
+}
+
+function mergeTablesForBase(
+  docs: Array<{ payload: Record<string, unknown> }>,
+): Map<string, string> {
+  const byTableId = new Map<string, string>();
+  for (const doc of docs) {
+    const tables = doc.payload?.tables;
+    if (!Array.isArray(tables)) {
+      continue;
+    }
+    for (const t of tables as unknown[]) {
+      if (
+        t &&
+        typeof t === 'object' &&
+        'id' in t &&
+        typeof (t as { id: unknown }).id === 'string'
+      ) {
+        const id = (t as { id: string }).id;
+        const name =
+          'name' in t && (t as { name: unknown }).name != null
+            ? String((t as { name: unknown }).name)
+            : id;
+        if (!byTableId.has(id)) {
+          byTableId.set(id, name);
+        }
+      }
+    }
+  }
+  return byTableId;
+}
+
+function airtableApiRecordToRow(
+  record: Record<string, unknown>,
+): Record<string, string> {
+  const flat: Record<string, string> = {};
+  flat.id =
+    typeof record.id === 'string' ? record.id : serializeValue(record.id ?? '');
+  flat.createdTime =
+    typeof record.createdTime === 'string'
+      ? record.createdTime
+      : serializeValue(record.createdTime ?? '');
+  const fields = record.fields;
+  if (fields && typeof fields === 'object' && !Array.isArray(fields)) {
+    for (const [k, v] of Object.entries(fields as Record<string, unknown>)) {
+      flat[k] = serializeValue(v);
+    }
+  }
+  return flat;
 }
 
 @Injectable()
 export class RawDataService {
-  constructor(@InjectConnection() private readonly connection: Connection) {}
+  constructor(
+    @InjectConnection() private readonly connection: Connection,
+    @InjectModel(AirtableBaseSyncPage.name)
+    private readonly basePages: Model<AirtableBaseSyncPageDocument>,
+    @InjectModel(AirtableTableSyncPage.name)
+    private readonly tablePages: Model<AirtableTableSyncPageDocument>,
+    @InjectModel(AirtableRecordSyncPage.name)
+    private readonly recordPages: Model<AirtableRecordSyncPageDocument>,
+  ) {}
 
   /** Active integrations for the UI (Airtable only in this build). */
   listIntegrations(): Promise<IntegrationListItem[]> {
@@ -105,34 +196,51 @@ export class RawDataService {
     ]);
   }
 
-  private async listMongoCollectionNames(): Promise<string[]> {
-    const db = this.connection.db;
-    if (!db) {
-      return [];
-    }
-    const cols = await db.listCollections().toArray();
-    return cols.map((c) => c.name).sort((a, b) => a.localeCompare(b));
-  }
+  /** Airtable tables from last sync (`meta/bases` + `meta/bases/:id/tables` pages in Mongo). */
+  private async listAirtableTableEntities(): Promise<
+    { id: string; label: string }[]
+  > {
+    const [baseDocs, tableDocsRaw] = await Promise.all([
+      this.basePages.find().lean().exec(),
+      this.tablePages.find().lean().exec(),
+    ]);
+    const baseIdToName = collectBaseNamesFromPages(baseDocs);
+    const tableDocs = tableDocsRaw as Array<{
+      baseId: string;
+      payload: Record<string, unknown>;
+    }>;
 
-  private filterRawByPrefix(names: string[], prefix: string): string[] {
-    const p = prefix.toLowerCase();
-    return names.filter(
-      (n) =>
-        n.toLowerCase().startsWith(p) && !RAW_DATA_COLLECTION_BLOCKLIST.has(n),
-    );
+    const tablesByBase = new Map<
+      string,
+      Array<{ payload: Record<string, unknown> }>
+    >();
+    for (const d of tableDocs) {
+      const list = tablesByBase.get(d.baseId) ?? [];
+      list.push({ payload: d.payload });
+      tablesByBase.set(d.baseId, list);
+    }
+
+    const out: { id: string; label: string }[] = [];
+    for (const [baseId, docs] of tablesByBase) {
+      const merged = mergeTablesForBase(docs);
+      const baseName = baseIdToName.get(baseId) ?? baseId;
+      for (const [tableId, tableName] of merged) {
+        out.push({
+          id: `atbl:${baseId}:${tableId}`,
+          label: `${baseName} › ${tableName}`,
+        });
+      }
+    }
+    out.sort((a, b) => a.label.localeCompare(b.label));
+    return out;
   }
 
   async listEntities(integrationId: string): Promise<{
     rawEntities: { id: string; label: string }[];
     processedEntities: { id: string; label: string }[];
   }> {
-    const all = await this.listMongoCollectionNames();
     if (integrationId === INTEGRATION_IDS.AIRTABLE) {
-      const rawNames = this.filterRawByPrefix(all, 'airtable_');
-      const rawEntities = rawNames.map((name) => ({
-        id: name,
-        label: collectionLabel(name),
-      }));
+      const rawEntities = await this.listAirtableTableEntities();
       const processedEntities = [
         {
           id: AIRTABLE_PROCESSED_COLLECTION,
@@ -153,14 +261,57 @@ export class RawDataService {
         `Collection not allowed: ${collectionName}`,
       );
     }
-    const p = collectionName.toLowerCase();
     if (collectionName === AIRTABLE_PROCESSED_COLLECTION) {
       return;
     }
-    if (p.startsWith('airtable_')) {
+    if (parseAirtableTableEntityId(collectionName)) {
       return;
     }
     throw new BadRequestException(`Collection not allowed: ${collectionName}`);
+  }
+
+  private async fetchAirtableTableRecordRows(
+    baseId: string,
+    tableId: string,
+    limit: number,
+  ): Promise<{
+    fields: string[];
+    rows: Record<string, string>[];
+    totalInDb: number;
+    truncated: boolean;
+  }> {
+    const pages = await this.recordPages
+      .find({ baseId, tableId })
+      .lean()
+      .exec();
+    let totalRecords = 0;
+    for (const p of pages) {
+      const recs = p.payload?.records;
+      totalRecords += Array.isArray(recs) ? recs.length : 0;
+    }
+    const cap = Math.min(Math.max(1, limit), MAX_RAW_DOCUMENTS);
+    const rows: Record<string, string>[] = [];
+    outer: for (const p of pages) {
+      const recs = p.payload?.records;
+      if (!Array.isArray(recs)) {
+        continue;
+      }
+      for (const r of recs) {
+        if (rows.length >= cap) {
+          break outer;
+        }
+        if (r && typeof r === 'object') {
+          rows.push(airtableApiRecordToRow(r as Record<string, unknown>));
+        }
+      }
+    }
+    const fields = collectFieldNames(rows);
+    return {
+      fields,
+      rows,
+      totalInDb: totalRecords,
+      truncated: totalRecords > rows.length,
+    };
   }
 
   async fetchCollectionRows(
@@ -174,6 +325,15 @@ export class RawDataService {
     truncated: boolean;
   }> {
     this.assertAllowedCollection(integrationId, collectionName);
+    const parsed = parseAirtableTableEntityId(collectionName);
+    if (parsed) {
+      return this.fetchAirtableTableRecordRows(
+        parsed.baseId,
+        parsed.tableId,
+        limit,
+      );
+    }
+
     const db = this.connection.db;
     if (!db) {
       throw new BadRequestException('Database connection not ready');
