@@ -94,40 +94,15 @@ function collectionLabel(name: string): string {
 export class RawDataService {
   constructor(@InjectConnection() private readonly connection: Connection) {}
 
-  /**
-   * Active integrations for the UI: Airtable is always available when this app is in use;
-   * GitHub is shown as connected when a token is configured, `github_*` collections exist, or
-   * `GITHUB_INTEGRATION_ACTIVE=1`.
-   */
-  async listIntegrations(): Promise<IntegrationListItem[]> {
-    const githubConnected = await this.isGithubIntegrationConnected();
-    return [
+  /** Active integrations for the UI (Airtable only in this build). */
+  listIntegrations(): Promise<IntegrationListItem[]> {
+    return Promise.resolve([
       {
         id: INTEGRATION_IDS.AIRTABLE,
         label: 'Airtable',
         connected: true,
       },
-      {
-        id: INTEGRATION_IDS.GITHUB,
-        label: 'GitHub',
-        connected: githubConnected,
-      },
-    ];
-  }
-
-  private async isGithubIntegrationConnected(): Promise<boolean> {
-    if (process.env.GITHUB_INTEGRATION_ACTIVE === '1') {
-      return true;
-    }
-    const token =
-      process.env.GITHUB_TOKEN?.trim() ||
-      process.env.GH_TOKEN?.trim() ||
-      process.env.GITHUB_ACCESS_TOKEN?.trim();
-    if (token) {
-      return true;
-    }
-    const all = await this.listMongoCollectionNames();
-    return this.filterGithubCollections(all).length > 0;
+    ]);
   }
 
   private async listMongoCollectionNames(): Promise<string[]> {
@@ -144,14 +119,6 @@ export class RawDataService {
     return names.filter(
       (n) =>
         n.toLowerCase().startsWith(p) && !RAW_DATA_COLLECTION_BLOCKLIST.has(n),
-    );
-  }
-
-  private filterGithubCollections(names: string[]): string[] {
-    return names.filter(
-      (n) =>
-        !RAW_DATA_COLLECTION_BLOCKLIST.has(n) &&
-        (n.toLowerCase().startsWith('github_') || n.toLowerCase() === 'github'),
     );
   }
 
@@ -174,25 +141,11 @@ export class RawDataService {
       ];
       return { rawEntities, processedEntities };
     }
-    if (integrationId === INTEGRATION_IDS.GITHUB) {
-      const rawNames = this.filterGithubCollections(all);
-      const rawEntities = rawNames.map((name) => ({
-        id: name,
-        label: collectionLabel(name),
-      }));
-      return {
-        rawEntities,
-        processedEntities: [] as { id: string; label: string }[],
-      };
-    }
     throw new BadRequestException(`Unknown integration: ${integrationId}`);
   }
 
   assertAllowedCollection(integrationId: string, collectionName: string) {
-    if (
-      integrationId !== INTEGRATION_IDS.AIRTABLE &&
-      integrationId !== INTEGRATION_IDS.GITHUB
-    ) {
+    if (integrationId !== INTEGRATION_IDS.AIRTABLE) {
       throw new BadRequestException(`Unknown integration: ${integrationId}`);
     }
     if (RAW_DATA_COLLECTION_BLOCKLIST.has(collectionName)) {
@@ -201,25 +154,13 @@ export class RawDataService {
       );
     }
     const p = collectionName.toLowerCase();
-    if (integrationId === INTEGRATION_IDS.AIRTABLE) {
-      if (collectionName === AIRTABLE_PROCESSED_COLLECTION) {
-        return;
-      }
-      if (p.startsWith('airtable_')) {
-        return;
-      }
-      throw new BadRequestException(
-        `Collection not allowed: ${collectionName}`,
-      );
+    if (collectionName === AIRTABLE_PROCESSED_COLLECTION) {
+      return;
     }
-    if (integrationId === INTEGRATION_IDS.GITHUB) {
-      if (p.startsWith('github_') || p === 'github') {
-        return;
-      }
-      throw new BadRequestException(
-        `Collection not allowed: ${collectionName}`,
-      );
+    if (p.startsWith('airtable_')) {
+      return;
     }
+    throw new BadRequestException(`Collection not allowed: ${collectionName}`);
   }
 
   async fetchCollectionRows(

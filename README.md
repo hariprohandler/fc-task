@@ -128,7 +128,7 @@ Open **`http://localhost:4200`**: **Active integration** defaults to **Airtable*
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /api/raw-data/integrations` | `[{ id, label, connected }]` — Airtable + GitHub; GitHub `connected` when token, `github_*` collections, or `GITHUB_INTEGRATION_ACTIVE=1` |
+| `GET /api/raw-data/integrations` | `[{ id, label, connected }]` — Airtable only |
 | `GET /api/raw-data/entities?integrationId=airtable` | `{ entities: { rawEntities, processedEntities } }` — raw = live `airtable_*` Mongo collections (minus OAuth/state drafts); processed = `processed_changelog` only |
 | `GET /api/raw-data/rows?integrationId=airtable&collection=…` | `{ fields, rows, totalInDb, truncated }` |
 

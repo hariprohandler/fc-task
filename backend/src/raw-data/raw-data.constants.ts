@@ -12,5 +12,4 @@ export const MAX_RAW_DOCUMENTS = 8000;
 
 export const INTEGRATION_IDS = {
   AIRTABLE: 'airtable',
-  GITHUB: 'github',
 } as const;
