@@ -1,7 +1,27 @@
 import * as cheerio from 'cheerio';
 import { createHash } from 'crypto';
 import { isTag } from 'domhandler';
+import { isRevisionVerboseLogEnabled } from './airtable-vendor-log';
+
 const TRACKED_FIELDS = new Set(['status', 'assignee']);
+
+const LOG_PREFIX = '[AirtableRevisionHtml]';
+
+function logHtmlParse(payload: Record<string, unknown>): void {
+  if (!isRevisionVerboseLogEnabled()) {
+    return;
+  }
+  console.log(LOG_PREFIX, payload);
+}
+
+/** Single-line preview for logs (no huge dumps). */
+function previewText(s: string, max = 220): string {
+  const t = s.replace(/\s+/g, ' ').trim();
+  if (t.length <= max) {
+    return t;
+  }
+  return `${t.slice(0, max)}…`;
+}
 
 export type RevisionHtmlSelectors = {
   entry: string;
@@ -31,6 +51,40 @@ export type ParsedRevisionActivity = {
   createdTime: string;
   originatingUserId: string;
 };
+
+/**
+ * Collapses duplicate activities that share the same `activityId` (first wins).
+ * Use after parsing so one sync pass cannot upsert the same key twice.
+ */
+export function dedupeParsedRevisionActivities(
+  activities: ParsedRevisionActivity[],
+): ParsedRevisionActivity[] {
+  const map = new Map<string, ParsedRevisionActivity>();
+  for (const a of activities) {
+    const id = typeof a.activityId === 'string' ? a.activityId.trim() : '';
+    if (!id) {
+      continue;
+    }
+    if (!map.has(id)) {
+      map.set(id, { ...a, activityId: id });
+    }
+  }
+  return [...map.values()];
+}
+
+function stableSynthActivityId(
+  columnType: string,
+  oldValue: string,
+  newValue: string,
+  entryHtml: string,
+): string {
+  const norm = entryHtml.replace(/\s+/g, ' ').trim();
+  const h = createHash('sha256')
+    .update(`${columnType}\0${oldValue}\0${newValue}\0${norm}`)
+    .digest('hex')
+    .slice(0, 24);
+  return `synth-${h}`;
+}
 
 export function normalizeFieldName(raw: string): string | null {
   const t = raw.replace(/\s+/g, ' ').trim();
@@ -129,7 +183,12 @@ function parseStructuredEntries(
       activityId = root.find(sel.uuid).first().text().trim();
     }
     if (!activityId) {
-      activityId = `synth-${columnType}-${oldValue}-${newValue}-${root.html()?.slice(0, 40)}`;
+      activityId = stableSynthActivityId(
+        columnType,
+        oldValue,
+        newValue,
+        root.html() ?? '',
+      );
     }
 
     let createdTime =
@@ -158,7 +217,14 @@ function parseStructuredEntries(
       originatingUserId,
     });
   });
-  return out.filter((a) => TRACKED_FIELDS.has(a.columnType));
+  const tracked = out.filter((a) => TRACKED_FIELDS.has(a.columnType));
+  const byId = new Map<string, ParsedRevisionActivity>();
+  for (const a of tracked) {
+    if (!byId.has(a.activityId)) {
+      byId.set(a.activityId, a);
+    }
+  }
+  return [...byId.values()];
 }
 
 const LABEL_TAGS = new Set(['span', 'div', 'strong', 'b', 'p', 'label', 'h4']);
@@ -286,19 +352,57 @@ export function parseRevisionHistoryHtml(
   html: string,
   selectorsJson?: string,
 ): ParsedRevisionActivity[] {
+  const rawTrim = html.trim();
   const unwrapped = unwrapRevisionPayload(html);
+  const customSel = parseSelectorsJson(selectorsJson ?? '');
   const sel = {
     ...DEFAULT_REVISION_SELECTORS,
-    ...parseSelectorsJson(selectorsJson ?? ''),
+    ...customSel,
   };
+
+  logHtmlParse({
+    phase: 'parseRevisionHistoryHtml:start',
+    rawLength: html.length,
+    unwrappedLength: unwrapped.length,
+    unwrapChangedPayload: unwrapped !== html,
+    rawStartsWithJson: rawTrim.startsWith('{') || rawTrim.startsWith('['),
+    customSelectorKeys:
+      Object.keys(customSel).length > 0 ? Object.keys(customSel) : undefined,
+    effectiveSelectors: sel,
+    unwrappedPreview: previewText(unwrapped),
+  });
+
   const $ = cheerio.load(unwrapped);
+  const entryMatchCount = $(sel.entry).length;
 
   const structured = parseStructuredEntries($, sel);
   if (structured.length > 0) {
+    logHtmlParse({
+      phase: 'parsePath',
+      path: 'structured',
+      entrySelector: sel.entry,
+      elementsMatchingEntrySelector: entryMatchCount,
+      trackedStatusAssigneeRows: structured.length,
+      skippedAsNonTrackedOrEmpty:
+        entryMatchCount > 0 ? entryMatchCount - structured.length : 0,
+      sample: structured[0],
+    });
     return structured;
   }
 
-  return parseHeuristicLabelRows($);
+  const heuristic = parseHeuristicLabelRows($);
+  logHtmlParse({
+    phase: 'parsePath',
+    path: 'heuristic',
+    reason:
+      entryMatchCount > 0
+        ? 'entry selector matched nodes but none were status/assignee with values'
+        : 'no nodes matched structured entry selector; scanning label tags for Status/Assignee',
+    elementsMatchingEntrySelector: entryMatchCount,
+    trackedStatusAssigneeRows: heuristic.length,
+    sample: heuristic[0],
+  });
+  return heuristic;
 }
 
 export function isTrackedColumnType(columnType: string): boolean {

@@ -10,6 +10,7 @@ import {
   parseReadRowActivitiesJson,
 } from './airtable-revision-api.parser';
 import {
+  dedupeParsedRevisionActivities,
   parseRevisionHistoryHtml,
   unwrapRevisionPayload,
 } from './airtable-revision-html.parser';
@@ -520,6 +521,7 @@ export class AirtableRevisionSyncService {
             ) {
               activities = parseRevisionHistoryHtml(html, selectorsJson);
             }
+            activities = dedupeParsedRevisionActivities(activities);
             if (activities.length === 0 && unwrapped.length > 40) {
               summary.recordsWithNoParsedEntries += 1;
               this.log.debug(

@@ -1,6 +1,9 @@
 import * as cheerio from 'cheerio';
 import type { ParsedRevisionActivity } from './airtable-revision-html.parser';
-import { normalizeFieldName } from './airtable-revision-html.parser';
+import {
+  dedupeParsedRevisionActivities,
+  normalizeFieldName,
+} from './airtable-revision-html.parser';
 
 function slugFieldLabel(label: string): string {
   const t = label.replace(/\s+/g, ' ').trim();
@@ -163,7 +166,7 @@ export function parseReadRowActivitiesJson(
     }
   }
 
-  return out;
+  return dedupeParsedRevisionActivities(out);
 }
 
 export function looksLikeReadRowActivitiesJson(raw: string): boolean {

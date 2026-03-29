@@ -106,6 +106,48 @@ export type UsersSyncSummary = {
 
 const SYNC_LOG_GROUP = 'airtable/sync';
 
+function dedupeBasePages<T extends { pageOffset: string | null }>(
+  rows: T[],
+): T[] {
+  const seen = new Set<string>();
+  return rows.filter((r) => {
+    const k = r.pageOffset ?? '';
+    if (seen.has(k)) {
+      return false;
+    }
+    seen.add(k);
+    return true;
+  });
+}
+
+function dedupeTablePages<
+  T extends { baseId: string; pageOffset: string | null },
+>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  return rows.filter((r) => {
+    const k = `${r.baseId}\0${r.pageOffset ?? ''}`;
+    if (seen.has(k)) {
+      return false;
+    }
+    seen.add(k);
+    return true;
+  });
+}
+
+function dedupeRecordPages<
+  T extends { baseId: string; tableId: string; pageOffset: string | null },
+>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  return rows.filter((r) => {
+    const k = `${r.baseId}\0${r.tableId}\0${r.pageOffset ?? ''}`;
+    if (seen.has(k)) {
+      return false;
+    }
+    seen.add(k);
+    return true;
+  });
+}
+
 @Injectable()
 export class AirtableSyncService {
   private readonly log = new Logger(AirtableSyncService.name);
@@ -138,20 +180,21 @@ export class AirtableSyncService {
     await this.trace('Bases: clearing stored pages');
     await this.basePages.deleteMany({});
     const basePageDocs = await this.api.listBasesPages();
-    if (basePageDocs.length > 0) {
-      await this.basePages.insertMany(
-        basePageDocs.map((p) => ({
-          pageOffset: p.pageOffset,
-          payload: p.payload,
-        })),
-      );
+    const baseRows = dedupeBasePages(
+      basePageDocs.map((p) => ({
+        pageOffset: p.pageOffset,
+        payload: p.payload,
+      })),
+    );
+    if (baseRows.length > 0) {
+      await this.basePages.insertMany(baseRows);
     }
-    const baseCount = collectBaseIdsFromPages(basePageDocs).length;
+    const baseCount = collectBaseIdsFromPages(baseRows).length;
     await this.trace(
-      `Bases: done — ${basePageDocs.length} page(s), ${baseCount} base id(s)`,
+      `Bases: done — ${baseRows.length} page(s), ${baseCount} base id(s)`,
     );
     return {
-      basePages: basePageDocs.length,
+      basePages: baseRows.length,
       bases: baseCount,
     };
   }
@@ -167,17 +210,18 @@ export class AirtableSyncService {
     for (const baseId of baseIds) {
       await this.trace(`Tables: fetching schema for base ${baseId}`);
       const tablePageList = await this.api.listTablesPages(baseId);
-      tablePageCount += tablePageList.length;
-      if (tablePageList.length > 0) {
-        await this.tablePages.insertMany(
-          tablePageList.map((p) => ({
-            baseId,
-            pageOffset: p.pageOffset,
-            payload: p.payload,
-          })),
-        );
+      const tableRows = dedupeTablePages(
+        tablePageList.map((p) => ({
+          baseId,
+          pageOffset: p.pageOffset,
+          payload: p.payload,
+        })),
+      );
+      tablePageCount += tableRows.length;
+      if (tableRows.length > 0) {
+        await this.tablePages.insertMany(tableRows);
       }
-      tablesSynced += collectTableIdsFromPages(tablePageList).length;
+      tablesSynced += collectTableIdsFromPages(tableRows).length;
     }
 
     await this.trace(
@@ -206,16 +250,17 @@ export class AirtableSyncService {
       for (const tableId of tableIds) {
         await this.trace(`Records: base ${baseId} table ${tableId}`);
         const recPages = await this.api.listRecordsPages(baseId, tableId);
-        recordPageCount += recPages.length;
-        if (recPages.length > 0) {
-          await this.recordPages.insertMany(
-            recPages.map((p) => ({
-              baseId,
-              tableId,
-              pageOffset: p.pageOffset,
-              payload: p.payload,
-            })),
-          );
+        const recordRows = dedupeRecordPages(
+          recPages.map((p) => ({
+            baseId,
+            tableId,
+            pageOffset: p.pageOffset,
+            payload: p.payload,
+          })),
+        );
+        recordPageCount += recordRows.length;
+        if (recordRows.length > 0) {
+          await this.recordPages.insertMany(recordRows);
         }
       }
     }
@@ -239,14 +284,15 @@ export class AirtableSyncService {
     try {
       await this.trace('Users: fetching pages from Airtable API');
       const userPageList = await this.api.listUsersPages();
-      userPageCount = userPageList.length;
-      if (userPageList.length > 0) {
-        await this.userPages.insertMany(
-          userPageList.map((p) => ({
-            pageOffset: p.pageOffset,
-            payload: p.payload,
-          })),
-        );
+      const userRows = dedupeBasePages(
+        userPageList.map((p) => ({
+          pageOffset: p.pageOffset,
+          payload: p.payload,
+        })),
+      );
+      userPageCount = userRows.length;
+      if (userRows.length > 0) {
+        await this.userPages.insertMany(userRows);
       }
     } catch (e) {
       usersError = e instanceof Error ? e.message : String(e);
