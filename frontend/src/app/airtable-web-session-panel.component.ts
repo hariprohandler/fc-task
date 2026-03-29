@@ -31,12 +31,10 @@ import { AirtableSessionApiService } from './services/airtable-session-api.servi
           Uses <code>/api/airtable/web-session/*</code> via dev proxy (backend on port 3000).
         </p>
 
-        <h3 class="sub primary-path">Google, Apple, or SSO sign-in</h3>
+        <h3 class="sub primary-path">Paste cookies from your browser</h3>
         <p class="hint">
-          Airtable’s Google login happens on Google’s site, so this app cannot drive that flow
-          with a password field. Sign in to
-          <strong>airtable.com</strong> in Chrome, open DevTools → Network → any request to
-          airtable.com → copy the full <strong>Cookie</strong> request header, then paste below.
+          Sign in to <strong>airtable.com</strong>, open DevTools → Network → a request to airtable.com →
+          copy the full <strong>Cookie</strong> request header, then paste below and save.
         </p>
         <mat-form-field appearance="outline" class="full">
           <mat-label>Cookie header (from DevTools)</mat-label>
@@ -50,49 +48,6 @@ import { AirtableSessionApiService } from './services/airtable-session-api.servi
         <div class="row">
           <button mat-flat-button color="primary" type="button" (click)="saveCookies()">
             Save cookies
-          </button>
-        </div>
-
-        <mat-divider class="divider" />
-
-        <h3 class="sub">Automated login (Airtable email + password only)</h3>
-        <p class="hint">
-          Optional Playwright flow for accounts that sign in with an <strong>email and password
-          on Airtable’s own form</strong> (not “Continue with Google”). Requires
-          <code>npx playwright install chromium</code> on the server.
-        </p>
-
-        <mat-form-field appearance="outline" class="full">
-          <mat-label>Email (or set AIRTABLE_WEB_LOGIN_EMAIL in backend .env)</mat-label>
-          <input matInput type="email" [(ngModel)]="email" autocomplete="username" />
-        </mat-form-field>
-        <mat-form-field appearance="outline" class="full">
-          <mat-label>Password (or set AIRTABLE_WEB_LOGIN_PASSWORD in backend .env)</mat-label>
-          <input
-            matInput
-            type="password"
-            [(ngModel)]="password"
-            autocomplete="current-password"
-          />
-        </mat-form-field>
-
-        <div class="row">
-          <button mat-stroked-button type="button" (click)="beginLogin()">
-            Begin login (Playwright)
-          </button>
-        </div>
-
-        <mat-form-field appearance="outline" class="full">
-          <mat-label>Session key (only if MFA step returned one)</mat-label>
-          <input matInput [(ngModel)]="sessionKey" />
-        </mat-form-field>
-        <mat-form-field appearance="outline" class="full">
-          <mat-label>MFA code</mat-label>
-          <input matInput [(ngModel)]="mfaCode" inputmode="numeric" autocomplete="one-time-code" />
-        </mat-form-field>
-        <div class="row">
-          <button mat-stroked-button type="button" (click)="completeLogin()">
-            Complete login (MFA)
           </button>
         </div>
 
@@ -114,7 +69,7 @@ import { AirtableSessionApiService } from './services/airtable-session-api.servi
         <div class="row">
           <button mat-button type="button" (click)="validateLight()">Validate (light)</button>
           <button mat-button type="button" (click)="validateStrong()">
-            Validate (revision POST)
+            Validate (revision API)
           </button>
         </div>
 
@@ -177,56 +132,20 @@ export class AirtableWebSessionPanelComponent {
   private readonly sessionApi = inject(AirtableSessionApiService);
 
   cookieHeader = '';
-  email = '';
-  password = '';
-  mfaCode = '';
-  sessionKey = '';
   sampleBaseId = '';
   sampleTableId = '';
   sampleRowId = '';
   message = '';
 
   saveCookies(): void {
-    this.sessionApi
-      .saveCookies(this.cookieHeader)
-      .subscribe({
-        next: (res) => {
-          this.message = JSON.stringify(res, null, 2);
-        },
-        error: (err) => {
-          this.message = this.formatErr(err);
-        },
-      });
-  }
-
-  beginLogin(): void {
-    this.sessionApi
-      .beginLogin(this.email, this.password)
-      .subscribe({
-        next: (res) => {
-          this.message = JSON.stringify(res, null, 2);
-          const r = res as { sessionKey?: string; mfaRequired?: boolean };
-          if (r.mfaRequired && r.sessionKey) {
-            this.sessionKey = r.sessionKey;
-          }
-        },
-        error: (err) => {
-          this.message = this.formatErr(err);
-        },
-      });
-  }
-
-  completeLogin(): void {
-    this.sessionApi
-      .completeLogin(this.sessionKey, this.mfaCode)
-      .subscribe({
-        next: (res) => {
-          this.message = JSON.stringify(res, null, 2);
-        },
-        error: (err) => {
-          this.message = this.formatErr(err);
-        },
-      });
+    this.sessionApi.saveCookies(this.cookieHeader).subscribe({
+      next: (res) => {
+        this.message = JSON.stringify(res, null, 2);
+      },
+      error: (err) => {
+        this.message = this.formatErr(err);
+      },
+    });
   }
 
   validateLight(): void {

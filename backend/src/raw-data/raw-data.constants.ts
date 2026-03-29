@@ -1,43 +1,16 @@
-/** Mongo collection names users may browse (OAuth/session secrets excluded). */
-export const AIRTABLE_ENTITY_COLLECTIONS: {
-  name: string;
-  label: string;
-  category: 'raw' | 'processed';
-}[] = [
-  {
-    name: 'airtable_bases_pages',
-    label: 'Bases',
-    category: 'raw',
-  },
-  {
-    name: 'airtable_tables_pages',
-    label: 'Tables',
-    category: 'raw',
-  },
-  {
-    name: 'airtable_records_pages',
-    label: 'Records',
-    category: 'raw',
-  },
-  {
-    name: 'airtable_users_pages',
-    label: 'Users',
-    category: 'raw',
-  },
-  {
-    name: 'processed_changelog',
-    label: 'processed_changelog',
-    category: 'processed',
-  },
-  {
-    name: 'airtable_web_sessions',
-    label: 'Web session',
-    category: 'processed',
-  },
-];
+/** Never expose these Mongo collections in the Raw Data entity picker or rows API. */
+export const RAW_DATA_COLLECTION_BLOCKLIST = new Set([
+  'airtable_oauth_tokens',
+  'airtable_oauth_state',
+  'raw_data_logs',
+]);
 
-export const RAW_DATA_INTEGRATIONS = [
-  { id: 'airtable', label: 'Airtable' },
-] as const;
+/** Single processed collection for the Airtable integration (Part C). */
+export const AIRTABLE_PROCESSED_COLLECTION = 'processed_changelog';
 
 export const MAX_RAW_DOCUMENTS = 8000;
+
+export const INTEGRATION_IDS = {
+  AIRTABLE: 'airtable',
+  GITHUB: 'github',
+} as const;

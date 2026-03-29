@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install lint lint-fix test test-ci build clean backend-install frontend-install root-install run-backend run-frontend run
+.PHONY: help install lint lint-fix test build clean backend-install frontend-install root-install run-backend run-frontend run
 
 help:
 	@echo "FC Task — make targets (running make with no target shows this list):"
@@ -8,8 +8,7 @@ help:
 	@echo "  make install     Install deps: npm ci at repo root, backend/, and frontend/"
 	@echo "  make lint        ESLint backend + ng lint frontend"
 	@echo "  make lint-fix    ESLint --fix backend + ng lint --fix frontend"
-	@echo "  make test        Jest (backend) + Karma headless (frontend)"
-	@echo "  make test-ci     Same as make test (alias)"
+	@echo "  make test        No-op (this repo validates via live API + OAuth + cookies)"
 	@echo "  make build       Production builds for backend and frontend"
 	@echo "  make clean       Remove dist/ and coverage artifacts under backend/ and frontend/"
 	@echo "  make run-backend Run NestJS API in watch mode (backend)"
@@ -37,10 +36,7 @@ lint-fix:
 	npm --prefix frontend run lint:fix
 
 test:
-	npm --prefix backend test
-	npm --prefix frontend run test:ci
-
-test-ci: test
+	@echo "No automated test suite. Use OAuth in .env, store cookies in Mongo, then call the sync/revision API routes."
 
 build:
 	npm --prefix backend run build

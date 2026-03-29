@@ -2,6 +2,12 @@ import { HttpException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { readOffset } from './airtable-pagination.util';
 import { AirtableOAuthService } from './airtable-oauth.service';
+import {
+  isAirtableVendorLogEnabled,
+  logAirtableVendorRequest,
+  logAirtableVendorResponse,
+  warnAirtableVendorFailure,
+} from './airtable-vendor-log';
 
 @Injectable()
 export class AirtableApiService {
@@ -40,6 +46,7 @@ export class AirtableApiService {
   ): Promise<Record<string, unknown>> {
     const token = await this.oauth.getValidAccessToken();
     const url = this.buildUrl(path, query);
+    logAirtableVendorRequest('api', { method: 'GET', url, path, query });
     const res = await fetch(url, {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -51,6 +58,20 @@ export class AirtableApiService {
       return this.requestJson(path, query, true);
     }
     const text = await res.text();
+    const previewLen = isAirtableVendorLogEnabled() ? 2000 : 0;
+    logAirtableVendorResponse('api', {
+      url,
+      status: res.status,
+      bodyLength: text.length,
+      ...(previewLen ? { bodyPreview: text.slice(0, previewLen) } : {}),
+    });
+    if (!res.ok && !isAirtableVendorLogEnabled()) {
+      warnAirtableVendorFailure('api', {
+        url,
+        status: res.status,
+        bodyPreview: text.slice(0, 400),
+      });
+    }
     let body: unknown;
     try {
       body = text ? JSON.parse(text) : {};

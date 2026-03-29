@@ -74,8 +74,7 @@ export class RawDataComponent implements OnInit {
   readonly defaultColDef: ColDef = {
     sortable: true,
     filter: 'agTextColumnFilter',
-    /** No second header row; filter via ⋮ → Filter tab and/or header funnel icon. */
-    floatingFilter: false,
+    floatingFilter: true,
     /** Honoured when `columnMenu: 'legacy'` (default `'new'` ignores menu tabs). */
     menuTabs: ['filterMenuTab', 'generalMenuTab'],
     resizable: true,
@@ -128,20 +127,22 @@ export class RawDataComponent implements OnInit {
   }
 
   loadIntegrations(): void {
-    this.rawDataApi
-      .integrations()
-      .subscribe({
-        next: (res) => {
-          this.integrations = res.integrations ?? [];
-          if (!this.selectedIntegrationId && this.integrations[0]) {
-            this.selectedIntegrationId = this.integrations[0].id;
-          }
-          this.loadEntities();
-        },
-        error: () => {
-          this.error = 'Failed to load integrations.';
-        },
-      });
+    this.rawDataApi.integrations().subscribe({
+      next: (res) => {
+        this.integrations = res.integrations ?? [];
+        const connected = this.integrations.filter((i) => i.connected);
+        if (
+          !connected.some((i) => i.id === this.selectedIntegrationId) &&
+          connected[0]
+        ) {
+          this.selectedIntegrationId = connected[0].id;
+        }
+        this.loadEntities();
+      },
+      error: () => {
+        this.error = 'Failed to load integrations.';
+      },
+    });
   }
 
   loadEntities(): void {
@@ -156,7 +157,11 @@ export class RawDataComponent implements OnInit {
           this.rawEntities = e?.rawEntities ?? [];
           this.processedEntities = e?.processedEntities ?? [];
           this.selectedEntityId = this.rawEntities[0]?.id ?? null;
-          this.selectedProcessedEntityId = '';
+          this.selectedProcessedEntityId =
+            this.selectedIntegrationId === 'airtable' &&
+            this.processedEntities.some((p) => p.id === 'processed_changelog')
+              ? 'processed_changelog'
+              : '';
           this.clearGridState();
           this.error = null;
         },
@@ -248,6 +253,7 @@ export class RawDataComponent implements OnInit {
       pinned: 'left',
       sortable: false,
       filter: false,
+      floatingFilter: false,
       suppressHeaderMenuButton: true,
       suppressMovable: true,
       resizable: false,

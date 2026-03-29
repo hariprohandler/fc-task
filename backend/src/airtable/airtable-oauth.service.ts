@@ -16,6 +16,12 @@ import {
   AirtableOAuthToken,
   AirtableOAuthTokenDocument,
 } from './schemas/oauth-token.schema';
+import {
+  isAirtableVendorLogEnabled,
+  logAirtableVendorRequest,
+  logAirtableVendorResponse,
+  warnAirtableVendorFailure,
+} from './airtable-vendor-log';
 
 const TOKEN_KEY = 'default';
 
@@ -127,7 +133,13 @@ export class AirtableOAuthService {
       headers.Authorization = `Basic ${basic}`;
     }
 
-    const res = await fetch(`${this.webHost}/oauth2/v1/token`, {
+    const tokenUrl = `${this.webHost}/oauth2/v1/token`;
+    logAirtableVendorRequest('oauth', {
+      method: 'POST',
+      url: tokenUrl,
+      grantType: 'authorization_code',
+    });
+    const res = await fetch(tokenUrl, {
       method: 'POST',
       headers,
       body,
@@ -136,7 +148,21 @@ export class AirtableOAuthService {
       error?: string;
       error_description?: string;
     };
+    const bodyStr = JSON.stringify(data);
+    logAirtableVendorResponse('oauth', {
+      url: tokenUrl,
+      status: res.status,
+      bodyLength: bodyStr.length,
+      note: 'response body omitted (tokens)',
+    });
     if (!res.ok) {
+      if (!isAirtableVendorLogEnabled()) {
+        warnAirtableVendorFailure('oauth', {
+          url: tokenUrl,
+          status: res.status,
+          error: data.error,
+        });
+      }
       throw new UnauthorizedException(
         data.error_description ?? data.error ?? 'Token exchange failed',
       );
@@ -184,7 +210,13 @@ export class AirtableOAuthService {
       );
       headers.Authorization = `Basic ${basic}`;
     }
-    const res = await fetch(`${this.webHost}/oauth2/v1/token`, {
+    const tokenUrl = `${this.webHost}/oauth2/v1/token`;
+    logAirtableVendorRequest('oauth', {
+      method: 'POST',
+      url: tokenUrl,
+      grantType: 'refresh_token',
+    });
+    const res = await fetch(tokenUrl, {
       method: 'POST',
       headers,
       body,
@@ -193,7 +225,21 @@ export class AirtableOAuthService {
       error?: string;
       error_description?: string;
     };
+    const bodyStr = JSON.stringify(data);
+    logAirtableVendorResponse('oauth', {
+      url: tokenUrl,
+      status: res.status,
+      bodyLength: bodyStr.length,
+      note: 'response body omitted (tokens)',
+    });
     if (!res.ok) {
+      if (!isAirtableVendorLogEnabled()) {
+        warnAirtableVendorFailure('oauth', {
+          url: tokenUrl,
+          status: res.status,
+          error: data.error,
+        });
+      }
       throw new UnauthorizedException(
         data.error_description ?? data.error ?? 'Refresh failed',
       );

@@ -32,7 +32,7 @@ High-level capabilities:
 
 - `/` - Raw Data grid page
 - `/logs` - Raw Data logs placeholder
-- `/airtable-session` - Airtable web session panel (cookie upload + optional automated login)
+- `/airtable-session` - Airtable web session panel (cookie paste + validation)
 
 ## 3) End-to-End Data Flow
 
@@ -53,10 +53,8 @@ Stored collections:
 
 ## B. Revision History Flow (Part B)
 
-1. Establish Airtable web session cookie:
-   - Recommended for Google/SSO users: `POST /api/airtable/web-session/cookies`
-   - Optional for Airtable email/password users: `login/begin` + `login/complete`
-2. Client calls `POST /api/airtable/revision/sync`.
+1. Store Airtable web cookies: `POST /api/airtable/web-session/cookies` (paste `Cookie` from DevTools).
+2. Client calls `POST /api/airtable/revision/sync`. If cookies are missing or Airtable returns **401/403**, the API responds with **401** and body `{ "error": "COOKIE_NOT_VALID", "message": "…" }`.
 3. Backend reads record IDs from `airtable_records_pages`.
 4. For each record, backend calls Airtable web endpoint (`readRowActivitiesAndComments`) using cookie auth.
 5. Response HTML (or JSON-wrapped HTML) is parsed for:
@@ -95,7 +93,7 @@ Revision entry shape:
 - `airtable-api.service.ts` - generic Airtable request + pagination helpers
 - `airtable-oauth.service.ts` - OAuth token lifecycle (store, refresh, valid access token)
 - `airtable-sync.service.ts` - sync orchestration and Mongo writes
-- `airtable-web-session.service.ts` - cookie storage/validation and optional Playwright login
+- `airtable-web-session.service.ts` - cookie storage and validation against airtable.com
 - `airtable-revision-sync.service.ts` - revision fetch + parse + upsert loop
 - `airtable-revision-html.parser.ts` - structured + heuristic parser for status/assignee changes
 - `oauth.controller.ts`, `sync.controller.ts`, `web-session.controller.ts`, `revision.controller.ts`
@@ -103,7 +101,7 @@ Revision entry shape:
 
 `backend/src/raw-data/`
 
-- `raw-data.constants.ts` - allowed collections and limits
+- `raw-data.constants.ts` - blocklist, processed collection id, limits
 - `raw-data.service.ts` - data shaping for grid responses
 - `raw-data.controller.ts` - raw-data API endpoints
 
@@ -141,9 +139,8 @@ Base URL: `/api`
 - `GET /airtable/web-session/status`
 - `POST /airtable/web-session/cookies`
 - `POST /airtable/web-session/validate`
-- `POST /airtable/web-session/login/begin` (email/password Airtable login only)
-- `POST /airtable/web-session/login/complete`
-- `POST /airtable/revision/sync`
+- `POST /airtable/revision/sync` (401 + `COOKIE_NOT_VALID` when session invalid)
+- `POST /airtable/revision/fetch` (single-row test; 401 + `COOKIE_NOT_VALID` when session invalid)
 - `GET /airtable/revision/entries`
 
 ### Raw data
@@ -162,10 +159,9 @@ Important keys:
 - `AIRTABLE_OAUTH_*` (OAuth client, redirect, scopes)
 - `AIRTABLE_WEB_HOST`
 - `AIRTABLE_API_BASE`
-- `AIRTABLE_REVISION_HISTORY_PATH_TEMPLATE`
-- `AIRTABLE_REVISION_POST_BODY_TEMPLATE`
-- `AIRTABLE_REVISION_HTML_SELECTORS` (optional parser override)
-- `AIRTABLE_WEB_LOGIN_EMAIL`, `AIRTABLE_WEB_LOGIN_PASSWORD` (optional)
+- Optional vendor logging: `AIRTABLE_VENDOR_LOG`, `AIRTABLE_REVISION_DEBUG` (see `airtable-vendor-log.ts`)
+
+Revision **web** request shape (headers, query `stringifiedObjectParams` / `requestId` / `secretSocketId`, referer, client code version) lives in **`airtable-revision-http.constants.ts`**, not in `.env`.
 
 ## 8) Run and Verify
 
@@ -192,15 +188,10 @@ Quality checks:
 
 ```bash
 make lint
-make test
 make build
 ```
 
-Revision-specific tests:
-
-```bash
-cd backend && npm test -- --testPathPatterns=airtable-revision
-```
+`make test` only prints a short reminder: this repo is validated against the **live** Airtable API (OAuth in `.env`, cookies in Mongo, then sync/revision HTTP routes).
 
 ## 9) Troubleshooting
 
@@ -211,8 +202,8 @@ cd backend && npm test -- --testPathPatterns=airtable-revision
   - Verify header menu appears and filter icon is not suppressed.
 - Revision sync gives 0 entries:
   - Cookie may be invalid.
-  - Revision endpoint path/body may not match your Airtable tenant.
-  - HTML selectors may need override via `AIRTABLE_REVISION_HTML_SELECTORS`.
+  - Update `airtable-revision-http.constants.ts` (path, referer view segment, `x-airtable-inter-service-client-code-version`, etc.) to match DevTools for your base.
+  - Adjust `REVISION_HTML_SELECTORS_JSON` in that file if responses are not the standard JSON shape.
 - Google login account:
   - Use cookie paste path, not automated email/password flow.
 

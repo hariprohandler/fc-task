@@ -29,7 +29,12 @@
         (ngModelChange)="onIntegrationChange()"
       >
         @for (i of integrations; track i.id) {
-          <mat-option [value]="i.id">{{ i.label }}</mat-option>
+          <mat-option [value]="i.id" [disabled]="!i.connected">
+            {{ i.label }}
+            @if (!i.connected) {
+              <span class="opt-muted"> (not connected)</span>
+            }
+          </mat-option>
         }
       </mat-select>
     </mat-form-field>
@@ -43,15 +48,17 @@
       </mat-select>
     </mat-form-field>
 
-    <mat-form-field appearance="outline" class="fld fld-processed">
-      <mat-label>Processed Entity</mat-label>
-      <mat-select [(ngModel)]="selectedProcessedEntityId">
-        <mat-option value="">—</mat-option>
-        @for (e of processedEntities; track e.id) {
-          <mat-option [value]="e.id">{{ e.label }}</mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
+    @if (processedEntities.length > 0) {
+      <mat-form-field appearance="outline" class="fld fld-processed">
+        <mat-label>Processed Entity</mat-label>
+        <mat-select [(ngModel)]="selectedProcessedEntityId">
+          <mat-option value="">— Raw entity only —</mat-option>
+          @for (e of processedEntities; track e.id) {
+            <mat-option [value]="e.id">{{ e.label }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+    }
 
     <mat-form-field appearance="outline" class="fld fld-search">
       <mat-label>Search</mat-label>
@@ -126,8 +133,7 @@
     <footer class="grid-footer">
       <span class="footer-left">{{ selectedRowsLabel() }}</span>
       <span class="footer-hint"
-        >Per-column filter: column menu (⋮) → <strong>Filter</strong> tab, or the
-        filter icon in the header. Quick search: Search box.</span
+        >Sort: column headers. Filter: floating row under headers, column menu (⋮), or Search for keywords across the grid.</span
       >
     </footer>
   </div>

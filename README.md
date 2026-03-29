@@ -13,7 +13,6 @@ For a single consolidated technical document (architecture, data flow, code stru
 - **Node.js 22** (use [nvm](https://github.com/nvm-sh/nvm): `nvm use` reads `.nvmrc`)
 - npm 10+
 - MongoDB (for Parts A–B of the product spec)
-- Chrome or Chromium (for frontend unit tests in headless mode)
 
 ## Quick start
 
@@ -22,7 +21,7 @@ nvm use
 make install
 ```
 
-The first `make install` runs `npm ci` at the repo root (Husky) and in `backend/` and `frontend/`. Frontend tests use Puppeteer’s Chromium when `CHROME_BIN` is unset; the browser is downloaded on first `npm install` in `frontend/`.
+The first `make install` runs `npm ci` at the repo root (Husky) and in `backend/` and `frontend/`.
 
 Run APIs (MongoDB must be reachable; copy `backend/.env.example` → `backend/.env`):
 
@@ -30,11 +29,7 @@ Run APIs (MongoDB must be reachable; copy `backend/.env.example` → `backend/.e
 cd backend && npm run start:dev
 ```
 
-Smoke-test OAuth + Mongo against the live Airtable API (uses `backend/.env`; complete OAuth once so tokens exist in Mongo):
-
-```bash
-cd backend && npm run test:airtable
-```
+Validate against the live Airtable API: complete OAuth once (tokens in Mongo), then call `POST /api/airtable/sync` (and revision routes after storing cookies).
 
 API base path: **`/api`**.
 
@@ -72,7 +67,7 @@ cd frontend && npm start
 | `make install` | `npm ci` at repo root + `backend/` + `frontend/` |
 | `make lint`    | ESLint backend + `ng lint` frontend             |
 | `make lint-fix`| ESLint `--fix` (backend) + `ng lint --fix` (frontend) |
-| `make test`    | Jest (backend) + Karma headless (frontend)      |
+| `make test`    | Prints reminder to use live API + OAuth + cookies (no automated suite) |
 | `make build`   | Production builds for both apps                 |
 | `make clean`   | Remove `dist/` and coverage artifacts           |
 
@@ -82,7 +77,7 @@ Root `npm run lint`, `npm run test`, and `npm run build` delegate to the same fl
 
 - Angular **19**, Angular Material (+ Material Icons via Google Fonts in `index.html`)
 - **AG Grid Community 33.0** with **AG Charts** 11.x (charts major version tracks AG Charts, not the grid)
-- NestJS 11 (backend), ESLint 9 flat config, Jest
+- NestJS 11 (backend), ESLint 9 flat config
 - **Node 22** — enforced via `.nvmrc` and `engines` in package manifests
 
 ## Git hooks
@@ -108,29 +103,24 @@ fc-task/
 └── frontend/             # Angular — AG Grid “raw data” style UI (Part C)
 ```
 
-### Part B — Revision history (web cookies + HTML)
+### Part B — Revision history (web cookies + JSON/HTML parsing)
 
 After `POST /api/airtable/sync`, record IDs live in Mongo (`airtable_records_pages`). Revision history uses **Airtable web** cookies (separate from the OAuth API token).
 
-**If you sign in with Google (or Apple / SSO):** use **`POST /api/airtable/web-session/cookies`** (or **Save cookies** on `/airtable-session`) — log into airtable.com in a normal browser, copy the **`Cookie`** header from DevTools → Network, paste it here. Automated Playwright login does **not** run Google’s OAuth flow; it only targets Airtable’s own email+password form.
-
-**If your Airtable account uses email + password on Airtable’s login page:** optional Playwright automation (`login/begin`, `login/complete`). Install Chromium once: `cd backend && npx playwright install chromium`.
+Sign in to **airtable.com** in a normal browser, then use **`POST /api/airtable/web-session/cookies`** (or **Save cookies** on **`/airtable-session`**) with the full **`Cookie`** header from DevTools → Network.
 
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/airtable/web-session/status` | Whether a cookie header is stored + last validation |
-| `POST /api/airtable/web-session/cookies` | Body `{ cookieHeader }` — **primary path for Google/SSO** (paste from DevTools) |
-| `POST /api/airtable/web-session/validate` | Body `{}` for light check, or `{ sample: { baseId, tableId, rowId } }` to POST the revision endpoint once |
-| `POST /api/airtable/web-session/login/begin` | **Email/password on Airtable only** — body optional `{ email, password }` (else `AIRTABLE_WEB_*` env). Returns `{ mfaRequired, sessionKey }` when MFA is needed |
-| `POST /api/airtable/web-session/login/complete` | Body `{ sessionKey, mfaCode }` after MFA |
-| `POST /api/airtable/revision/sync` | Body optional `{ baseId?, tableId?, maxRecords?, delayMs? }` — fetches HTML per record, parses **Assignee** and **Status** only, upserts `airtable_revision_entries` |
-| `GET /api/airtable/revision/entries` | Query `issueId`, `baseId`, `limit` |
+| `POST /api/airtable/web-session/cookies` | Body `{ cookieHeader }` — store cookies from DevTools |
+| `POST /api/airtable/web-session/validate` | Body `{}` for light check, or `{ sample: { baseId, tableId, rowId } }` to hit the revision API once |
+| `POST /api/airtable/revision/sync` | Body optional `{ baseId?, tableId?, maxRecords?, delayMs? }`. **401** with `error: "COOKIE_NOT_VALID"` if cookies are missing or rejected by Airtable |
+| `POST /api/airtable/revision/fetch` | Body `{ baseId, tableId, rowId }` — same **401** + `COOKIE_NOT_VALID` when the session is invalid |
+| `GET /api/airtable/revision/entries` | Query `issueId`, `baseId`, `limit` (reads Mongo only; no Airtable cookie) |
 
-Configure `AIRTABLE_REVISION_HISTORY_PATH_TEMPLATE` and `AIRTABLE_REVISION_POST_BODY_TEMPLATE` to match what you see in the browser Network tab for `readRowActivitiesAndComments`. Override DOM selectors with `AIRTABLE_REVISION_HTML_SELECTORS` (JSON) if the default `[data-revision-entry]` fixture shape does not match production HTML.
+Revision HTTP (path, query, headers, referer view segment) is defined in **`backend/src/airtable/airtable-revision-http.constants.ts`** — edit that file to match DevTools; only **cookies** are stored via the API/Mongo. Optional logging: `AIRTABLE_VENDOR_LOG`, `AIRTABLE_REVISION_DEBUG` (see `airtable-vendor-log.ts`).
 
-Jest bulk test: `npm test -- --testPathPatterns=airtable-revision` (200 mocked record fetches).
-
-The Angular app serves **Airtable web session** at **`/airtable-session`** (MFA + validation). `ng serve` proxies `/api` to `http://localhost:3000`.
+The Angular app serves **Airtable web session** at **`/airtable-session`** (cookie paste + validation). `ng serve` proxies `/api` to `http://localhost:3000`.
 
 ### Part C — Raw Data UI (`frontend/src/app/raw-data/`)
 
@@ -138,8 +128,8 @@ Open **`http://localhost:4200`**: **Active integration** defaults to **Airtable*
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /api/raw-data/integrations` | e.g. `[{ id: airtable, label: Airtable }]` |
-| `GET /api/raw-data/entities?integrationId=airtable` | `{ entities: { rawEntities, processedEntities } }` — sync API pages vs processed (`processed_changelog`) |
+| `GET /api/raw-data/integrations` | `[{ id, label, connected }]` — Airtable + GitHub; GitHub `connected` when token, `github_*` collections, or `GITHUB_INTEGRATION_ACTIVE=1` |
+| `GET /api/raw-data/entities?integrationId=airtable` | `{ entities: { rawEntities, processedEntities } }` — raw = live `airtable_*` Mongo collections (minus OAuth/state drafts); processed = `processed_changelog` only |
 | `GET /api/raw-data/rows?integrationId=airtable&collection=…` | `{ fields, rows, totalInDb, truncated }` |
 
 ## Next implementation steps (task brief)

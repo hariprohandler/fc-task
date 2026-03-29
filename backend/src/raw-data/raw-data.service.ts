@@ -2,10 +2,17 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
 import {
-  AIRTABLE_ENTITY_COLLECTIONS,
+  AIRTABLE_PROCESSED_COLLECTION,
+  INTEGRATION_IDS,
   MAX_RAW_DOCUMENTS,
-  RAW_DATA_INTEGRATIONS,
+  RAW_DATA_COLLECTION_BLOCKLIST,
 } from './raw-data.constants';
+
+export type IntegrationListItem = {
+  id: string;
+  label: string;
+  connected: boolean;
+};
 
 function serializeValue(v: unknown): string {
   if (v === null || v === undefined) {
@@ -79,33 +86,136 @@ function collectFieldNames(rows: Record<string, string>[]): string[] {
   return list;
 }
 
+function collectionLabel(name: string): string {
+  return name;
+}
+
 @Injectable()
 export class RawDataService {
   constructor(@InjectConnection() private readonly connection: Connection) {}
 
-  listIntegrations() {
-    return RAW_DATA_INTEGRATIONS.map((i) => ({ id: i.id, label: i.label }));
+  /**
+   * Active integrations for the UI: Airtable is always available when this app is in use;
+   * GitHub is shown as connected when a token is configured, `github_*` collections exist, or
+   * `GITHUB_INTEGRATION_ACTIVE=1`.
+   */
+  async listIntegrations(): Promise<IntegrationListItem[]> {
+    const githubConnected = await this.isGithubIntegrationConnected();
+    return [
+      {
+        id: INTEGRATION_IDS.AIRTABLE,
+        label: 'Airtable',
+        connected: true,
+      },
+      {
+        id: INTEGRATION_IDS.GITHUB,
+        label: 'GitHub',
+        connected: githubConnected,
+      },
+    ];
   }
 
-  listEntities(integrationId: string) {
-    if (integrationId !== 'airtable') {
-      throw new BadRequestException(`Unknown integration: ${integrationId}`);
+  private async isGithubIntegrationConnected(): Promise<boolean> {
+    if (process.env.GITHUB_INTEGRATION_ACTIVE === '1') {
+      return true;
     }
-    const raw = AIRTABLE_ENTITY_COLLECTIONS.filter(
-      (c) => c.category === 'raw',
-    ).map((c) => ({ id: c.name, label: c.label }));
-    const processed = AIRTABLE_ENTITY_COLLECTIONS.filter(
-      (c) => c.category === 'processed',
-    ).map((c) => ({ id: c.name, label: c.label }));
-    return { rawEntities: raw, processedEntities: processed };
+    const token =
+      process.env.GITHUB_TOKEN?.trim() ||
+      process.env.GH_TOKEN?.trim() ||
+      process.env.GITHUB_ACCESS_TOKEN?.trim();
+    if (token) {
+      return true;
+    }
+    const all = await this.listMongoCollectionNames();
+    return this.filterGithubCollections(all).length > 0;
+  }
+
+  private async listMongoCollectionNames(): Promise<string[]> {
+    const db = this.connection.db;
+    if (!db) {
+      return [];
+    }
+    const cols = await db.listCollections().toArray();
+    return cols.map((c) => c.name).sort((a, b) => a.localeCompare(b));
+  }
+
+  private filterRawByPrefix(names: string[], prefix: string): string[] {
+    const p = prefix.toLowerCase();
+    return names.filter(
+      (n) =>
+        n.toLowerCase().startsWith(p) && !RAW_DATA_COLLECTION_BLOCKLIST.has(n),
+    );
+  }
+
+  private filterGithubCollections(names: string[]): string[] {
+    return names.filter(
+      (n) =>
+        !RAW_DATA_COLLECTION_BLOCKLIST.has(n) &&
+        (n.toLowerCase().startsWith('github_') || n.toLowerCase() === 'github'),
+    );
+  }
+
+  async listEntities(integrationId: string): Promise<{
+    rawEntities: { id: string; label: string }[];
+    processedEntities: { id: string; label: string }[];
+  }> {
+    const all = await this.listMongoCollectionNames();
+    if (integrationId === INTEGRATION_IDS.AIRTABLE) {
+      const rawNames = this.filterRawByPrefix(all, 'airtable_');
+      const rawEntities = rawNames.map((name) => ({
+        id: name,
+        label: collectionLabel(name),
+      }));
+      const processedEntities = [
+        {
+          id: AIRTABLE_PROCESSED_COLLECTION,
+          label: AIRTABLE_PROCESSED_COLLECTION,
+        },
+      ];
+      return { rawEntities, processedEntities };
+    }
+    if (integrationId === INTEGRATION_IDS.GITHUB) {
+      const rawNames = this.filterGithubCollections(all);
+      const rawEntities = rawNames.map((name) => ({
+        id: name,
+        label: collectionLabel(name),
+      }));
+      return {
+        rawEntities,
+        processedEntities: [] as { id: string; label: string }[],
+      };
+    }
+    throw new BadRequestException(`Unknown integration: ${integrationId}`);
   }
 
   assertAllowedCollection(integrationId: string, collectionName: string) {
-    if (integrationId !== 'airtable') {
+    if (
+      integrationId !== INTEGRATION_IDS.AIRTABLE &&
+      integrationId !== INTEGRATION_IDS.GITHUB
+    ) {
       throw new BadRequestException(`Unknown integration: ${integrationId}`);
     }
-    const allowed = new Set(AIRTABLE_ENTITY_COLLECTIONS.map((c) => c.name));
-    if (!allowed.has(collectionName)) {
+    if (RAW_DATA_COLLECTION_BLOCKLIST.has(collectionName)) {
+      throw new BadRequestException(
+        `Collection not allowed: ${collectionName}`,
+      );
+    }
+    const p = collectionName.toLowerCase();
+    if (integrationId === INTEGRATION_IDS.AIRTABLE) {
+      if (collectionName === AIRTABLE_PROCESSED_COLLECTION) {
+        return;
+      }
+      if (p.startsWith('airtable_')) {
+        return;
+      }
+      throw new BadRequestException(
+        `Collection not allowed: ${collectionName}`,
+      );
+    }
+    if (integrationId === INTEGRATION_IDS.GITHUB) {
+      if (p.startsWith('github_') || p === 'github') {
+        return;
+      }
       throw new BadRequestException(
         `Collection not allowed: ${collectionName}`,
       );

@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Query, Body } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+} from '@nestjs/common';
+import { createCookieNotValidException } from './airtable-cookie-not-valid.exception';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AirtableRevisionSyncService } from './airtable-revision-sync.service';
@@ -20,6 +28,35 @@ export class AirtableRevisionController {
   async runSync(@Body() body: RevisionSyncOptions) {
     const summary = await this.revisionSync.syncRevisionHistory(body ?? {});
     return { ok: true, summary };
+  }
+
+  @Post('fetch')
+  async fetchOne(
+    @Body() body: { baseId?: string; tableId?: string; rowId?: string },
+  ) {
+    const baseId = body?.baseId?.trim();
+    const tableId = body?.tableId?.trim();
+    const rowId = body?.rowId?.trim();
+    if (!baseId || !tableId || !rowId) {
+      throw new BadRequestException('baseId, tableId, and rowId are required');
+    }
+    const r = await this.revisionSync.debugFetchRevision(
+      baseId,
+      tableId,
+      rowId,
+    );
+    if (r.status === 401 || r.status === 403) {
+      throw createCookieNotValidException({
+        airtableHttpStatus: r.status,
+      });
+    }
+    return {
+      ok: r.status === 200,
+      status: r.status,
+      url: r.url,
+      bodyLength: r.body.length,
+      bodyPreview: r.body.slice(0, 12_000),
+    };
   }
 
   @Get('entries')

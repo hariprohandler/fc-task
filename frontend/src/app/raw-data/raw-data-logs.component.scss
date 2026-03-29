@@ -1,0 +1,146 @@
+.cw-root {
+  min-height: 100vh;
+  background: #161d26;
+  color: #e9e9e9;
+  display: flex;
+  flex-direction: column;
+}
+
+.cw-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  border-bottom: 1px solid #2a3544;
+  background: #1b232e;
+}
+
+.cw-back {
+  color: #8ab4f8;
+}
+
+.cw-breadcrumb {
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+
+.cw-crumb-muted {
+  color: #8d99a8;
+}
+
+.cw-crumb-sep {
+  margin: 0 8px;
+  color: #5c6b7d;
+}
+
+.cw-crumb-active {
+  color: #f0f0f0;
+  font-weight: 500;
+}
+
+.cw-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #2a3544;
+  background: #1b232e;
+}
+
+.cw-field-group {
+  width: 220px;
+}
+
+.cw-field-filter {
+  flex: 1;
+  min-width: 200px;
+  max-width: 480px;
+}
+
+.cw-toggle {
+  color: #c5d0db;
+}
+
+.cw-error {
+  margin: 12px 20px;
+  color: #ff8a80;
+}
+
+.cw-events-wrap {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.cw-loading,
+.cw-empty {
+  padding: 32px 20px;
+  color: #8d99a8;
+}
+
+.cw-loading {
+  display: flex;
+  justify-content: center;
+}
+
+.cw-events {
+  flex: 1;
+  overflow: auto;
+  font-family: 'Amazon Ember Mono', 'SF Mono', ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 8px 0 24px;
+}
+
+.cw-line {
+  display: flex;
+  gap: 16px;
+  padding: 2px 20px;
+  border-left: 3px solid transparent;
+}
+
+.cw-line:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.cw-ts {
+  flex: 0 0 192px;
+  color: #6b7c8f;
+  white-space: nowrap;
+}
+
+.cw-msg {
+  flex: 1;
+  color: #dce4ec;
+  word-break: break-word;
+}
+
+.cw-warn .cw-msg {
+  color: #ffd54f;
+}
+
+.cw-err .cw-msg {
+  color: #ff8a80;
+}
+
+.cw-warn {
+  border-left-color: #ffc107;
+}
+
+.cw-err {
+  border-left-color: #f44336;
+}
+
+/* Material outline fields on dark panel */
+:host ::ng-deep .cw-toolbar .mat-mdc-form-field {
+  --mdc-outlined-text-field-outline-color: #3d4d61;
+  --mdc-outlined-text-field-focus-outline-color: #8ab4f8;
+  --mat-form-field-outlined-label-text-color: #8d99a8;
+  --mat-form-field-outlined-input-text-color: #e9e9e9;
+}
+
+:host ::ng-deep .cw-toolbar .mat-mdc-icon-button {
+  color: #8d99a8;
+}

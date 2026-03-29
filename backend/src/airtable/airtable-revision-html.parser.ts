@@ -32,7 +32,7 @@ export type ParsedRevisionActivity = {
   originatingUserId: string;
 };
 
-function normalizeFieldName(raw: string): string | null {
+export function normalizeFieldName(raw: string): string | null {
   const t = raw.replace(/\s+/g, ' ').trim();
   if (!t) {
     return null;
@@ -193,10 +193,16 @@ function parseHeuristicLabelRows(
       .filter((n) => isTextNode(n))
       .map((n) => $(n).text().trim())
       .filter(Boolean);
-    if (directTexts.length !== 1) {
-      return;
+    let columnType: string | null = null;
+    if (directTexts.length === 1) {
+      columnType = normalizeFieldName(directTexts[0]);
     }
-    const columnType = normalizeFieldName(directTexts[0]);
+    if (!columnType) {
+      const collapsed = $el.text().replace(/\s+/g, ' ').trim();
+      if (collapsed.length > 0 && collapsed.length <= 48) {
+        columnType = normalizeFieldName(collapsed);
+      }
+    }
     if (!columnType) {
       return;
     }
@@ -227,6 +233,21 @@ function parseHeuristicLabelRows(
       if (parts.length >= 2) {
         oldValue = parts[0].trim();
         newValue = parts[parts.length - 1].trim();
+      }
+    }
+    if (!oldValue && !newValue) {
+      const $peer = $el.parent().next();
+      if ($peer.length) {
+        const one = $peer.text().replace(/\s+/g, ' ').trim();
+        if (one) {
+          const parts = one.split(/\s*(?:→|->| to )\s*/i);
+          if (parts.length >= 2) {
+            oldValue = parts[0].trim();
+            newValue = parts[parts.length - 1].trim();
+          } else {
+            newValue = one;
+          }
+        }
       }
     }
     if (!oldValue && !newValue) {

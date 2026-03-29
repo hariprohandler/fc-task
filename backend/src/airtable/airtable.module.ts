@@ -44,10 +44,6 @@ import {
   AirtableRevisionEntrySchema,
 } from './schemas/revision-entry.schema';
 import {
-  AirtableWebLoginDraft,
-  AirtableWebLoginDraftSchema,
-} from './schemas/web-login-draft.schema';
-import {
   AirtableWebSession,
   AirtableWebSessionSchema,
 } from './schemas/web-session.schema';
@@ -55,9 +51,11 @@ import {
   ProcessedChangelog,
   ProcessedChangelogSchema,
 } from './schemas/processed-changelog.schema';
+import { RawDataModule } from '../raw-data/raw-data.module';
 
 @Module({
   imports: [
+    RawDataModule,
     MongooseModule.forFeature([
       { name: AirtableOAuthToken.name, schema: AirtableOAuthTokenSchema },
       { name: AirtableOAuthState.name, schema: AirtableOAuthStateSchema },
@@ -69,7 +67,6 @@ import {
       },
       { name: AirtableUserSyncPage.name, schema: AirtableUserSyncPageSchema },
       { name: AirtableWebSession.name, schema: AirtableWebSessionSchema },
-      { name: AirtableWebLoginDraft.name, schema: AirtableWebLoginDraftSchema },
       {
         name: AirtableRevisionEntry.name,
         schema: AirtableRevisionEntrySchema,

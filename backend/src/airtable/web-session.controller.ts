@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
+import { COOKIE_NOT_VALID_MESSAGE } from './airtable-cookie-not-valid.exception';
 import { plausibleAirtableCookieHeader } from './airtable-cookie.util';
 import { AirtableRevisionSyncService } from './airtable-revision-sync.service';
 import { AirtableWebSessionService } from './airtable-web-session.service';
@@ -51,7 +52,12 @@ export class AirtableWebSessionController {
     }
     const h = await this.session.getCookieHeader();
     if (!h) {
-      return { ok: false, valid: false, message: 'No cookies' };
+      return {
+        ok: false,
+        error: 'COOKIE_NOT_VALID',
+        valid: false,
+        message: COOKIE_NOT_VALID_MESSAGE,
+      };
     }
     if (body?.sample) {
       const valid = await this.revision.validateCookiesWithRevision(
@@ -63,15 +69,5 @@ export class AirtableWebSessionController {
     }
     const valid = await this.session.validateCookies(h);
     return { ok: true, valid, mode: 'header_get' };
-  }
-
-  @Post('login/begin')
-  async loginBegin(@Body() body: { email?: string; password?: string }) {
-    return this.session.beginWebLogin(body ?? {});
-  }
-
-  @Post('login/complete')
-  async loginComplete(@Body() body: { sessionKey: string; mfaCode: string }) {
-    return this.session.completeWebLogin(body);
   }
 }

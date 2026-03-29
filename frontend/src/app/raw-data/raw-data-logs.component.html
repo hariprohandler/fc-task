@@ -1,0 +1,97 @@
+<div class="cw-root">
+  <header class="cw-top">
+    <a mat-button routerLink="/" class="cw-back">← Raw Data</a>
+    <div class="cw-breadcrumb">
+      <span class="cw-crumb-muted">Log groups</span>
+      <span class="cw-crumb-sep">›</span>
+      <span class="cw-crumb-active">{{ selectedGroup() || '—' }}</span>
+    </div>
+  </header>
+
+  <div class="cw-toolbar">
+    <mat-form-field appearance="outline" class="cw-field-group" subscriptSizing="dynamic">
+      <mat-label>Log group</mat-label>
+      <mat-select
+        [value]="selectedGroup()"
+        (selectionChange)="onGroupChange($event.value)"
+      >
+        @for (g of groups(); track g) {
+          <mat-option [value]="g">{{ g }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="cw-field-filter" subscriptSizing="dynamic">
+      <mat-label>Filter pattern</mat-label>
+      <input
+        matInput
+        [ngModel]="filterText()"
+        (ngModelChange)="onFilterChange($event)"
+        placeholder="Substring match on message"
+      />
+      <button
+        mat-icon-button
+        matSuffix
+        type="button"
+        aria-label="Clear filter"
+        [disabled]="!filterText()"
+        (click)="clearFilter()"
+      >
+        <mat-icon>close</mat-icon>
+      </button>
+    </mat-form-field>
+
+    <mat-slide-toggle
+      [checked]="autoRefresh()"
+      (change)="setAutoRefresh($event.checked)"
+      class="cw-toggle"
+    >
+      Live tail
+    </mat-slide-toggle>
+
+    <button
+      mat-stroked-button
+      type="button"
+      (click)="refresh()"
+      [disabled]="loading()"
+    >
+      <mat-icon>refresh</mat-icon>
+      Refresh
+    </button>
+
+    <button
+      mat-stroked-button
+      type="button"
+      (click)="loadOlder()"
+      [disabled]="loadingMore() || !events().length"
+    >
+      <mat-icon>expand_less</mat-icon>
+      Load older
+    </button>
+  </div>
+
+  @if (error()) {
+    <p class="cw-error">{{ error() }}</p>
+  }
+
+  <div class="cw-events-wrap">
+    @if (loading() && !events().length) {
+      <div class="cw-loading">
+        <mat-spinner diameter="36" />
+      </div>
+    } @else if (!events().length) {
+      <p class="cw-empty">
+        No events in this group yet. Run an Airtable sync from the API or wait for new log lines.
+      </p>
+    } @else {
+      <div class="cw-events" #eventsScroll>
+        @for (ev of events(); track ev.id) {
+          <div class="cw-line" [class.cw-warn]="ev.level === 'warn'" [class.cw-err]="ev.level === 'error'">
+            <span class="cw-ts">{{ ev.timestamp }}</span>
+            <span class="cw-msg">{{ ev.message }}</span>
+          </div>
+        }
+      </div>
+    }
+  </div>
+</div>

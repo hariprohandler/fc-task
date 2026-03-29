@@ -1,7 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { HttpException, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { RawDataLogService } from '../raw-data/services/raw-data-log.service';
 import { AirtableApiService } from './airtable-api.service';
+import type { RevisionSyncSummary } from './airtable-revision-sync.service';
+import { AirtableRevisionSyncService } from './airtable-revision-sync.service';
 import type { AirtableBaseSyncPageDocument } from './schemas/base-sync-page.schema';
 import { AirtableBaseSyncPage } from './schemas/base-sync-page.schema';
 import type { AirtableRecordSyncPageDocument } from './schemas/record-sync-page.schema';
@@ -60,6 +63,13 @@ function collectBaseIdsFromPages(
   return ids;
 }
 
+export type FullSyncOptions = {
+  /** After API sync, run web revision/changelog scrape (requires valid Airtable cookies). */
+  includeRevisionHistory?: boolean;
+  revisionMaxRecords?: number;
+  revisionDelayMs?: number;
+};
+
 export type SyncSummary = {
   basePages: number;
   tablePages: number;
@@ -68,6 +78,8 @@ export type SyncSummary = {
   bases: number;
   tablesSynced: number;
   usersError?: string;
+  revisionHistory?: RevisionSyncSummary;
+  revisionHistoryError?: string;
 };
 
 export type BasesSyncSummary = {
@@ -92,12 +104,16 @@ export type UsersSyncSummary = {
   usersError?: string;
 };
 
+const SYNC_LOG_GROUP = 'airtable/sync';
+
 @Injectable()
 export class AirtableSyncService {
   private readonly log = new Logger(AirtableSyncService.name);
 
   constructor(
     private readonly api: AirtableApiService,
+    private readonly revision: AirtableRevisionSyncService,
+    private readonly rawLogs: RawDataLogService,
     @InjectModel(AirtableBaseSyncPage.name)
     private readonly basePages: Model<AirtableBaseSyncPageDocument>,
     @InjectModel(AirtableTableSyncPage.name)
@@ -108,7 +124,18 @@ export class AirtableSyncService {
     private readonly userPages: Model<AirtableUserSyncPageDocument>,
   ) {}
 
+  private async trace(
+    message: string,
+    level: 'info' | 'warn' | 'error' = 'info',
+  ): Promise<void> {
+    this.log[level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log'](
+      message,
+    );
+    await this.rawLogs.append(SYNC_LOG_GROUP, message, level);
+  }
+
   async syncBasesOnly(): Promise<BasesSyncSummary> {
+    await this.trace('Bases: clearing stored pages');
     await this.basePages.deleteMany({});
     const basePageDocs = await this.api.listBasesPages();
     if (basePageDocs.length > 0) {
@@ -119,13 +146,18 @@ export class AirtableSyncService {
         })),
       );
     }
+    const baseCount = collectBaseIdsFromPages(basePageDocs).length;
+    await this.trace(
+      `Bases: done — ${basePageDocs.length} page(s), ${baseCount} base id(s)`,
+    );
     return {
       basePages: basePageDocs.length,
-      bases: collectBaseIdsFromPages(basePageDocs).length,
+      bases: baseCount,
     };
   }
 
   async syncTablesOnly(): Promise<TablesSyncSummary> {
+    await this.trace('Tables: clearing stored pages');
     await this.tablePages.deleteMany({});
     const basePageDocs = await this.api.listBasesPages();
     const baseIds = collectBaseIdsFromPages(basePageDocs);
@@ -133,6 +165,7 @@ export class AirtableSyncService {
     let tablePageCount = 0;
     let tablesSynced = 0;
     for (const baseId of baseIds) {
+      await this.trace(`Tables: fetching schema for base ${baseId}`);
       const tablePageList = await this.api.listTablesPages(baseId);
       tablePageCount += tablePageList.length;
       if (tablePageList.length > 0) {
@@ -147,6 +180,9 @@ export class AirtableSyncService {
       tablesSynced += collectTableIdsFromPages(tablePageList).length;
     }
 
+    await this.trace(
+      `Tables: done — ${tablePageCount} page(s) across ${baseIds.length} base(s), ${tablesSynced} table id(s)`,
+    );
     return {
       tablePages: tablePageCount,
       bases: baseIds.length,
@@ -155,6 +191,7 @@ export class AirtableSyncService {
   }
 
   async syncRecordsOnly(): Promise<RecordsSyncSummary> {
+    await this.trace('Records: clearing stored pages');
     await this.recordPages.deleteMany({});
     const basePageDocs = await this.api.listBasesPages();
     const baseIds = collectBaseIdsFromPages(basePageDocs);
@@ -167,6 +204,7 @@ export class AirtableSyncService {
       tablesSynced += tableIds.length;
 
       for (const tableId of tableIds) {
+        await this.trace(`Records: base ${baseId} table ${tableId}`);
         const recPages = await this.api.listRecordsPages(baseId, tableId);
         recordPageCount += recPages.length;
         if (recPages.length > 0) {
@@ -182,6 +220,9 @@ export class AirtableSyncService {
       }
     }
 
+    await this.trace(
+      `Records: done — ${recordPageCount} record page(s), ${baseIds.length} base(s), ${tablesSynced} table(s)`,
+    );
     return {
       recordPages: recordPageCount,
       bases: baseIds.length,
@@ -190,11 +231,13 @@ export class AirtableSyncService {
   }
 
   async syncUsersOnly(): Promise<UsersSyncSummary> {
+    await this.trace('Users: clearing stored pages');
     await this.userPages.deleteMany({});
 
     let userPageCount = 0;
     let usersError: string | undefined;
     try {
+      await this.trace('Users: fetching pages from Airtable API');
       const userPageList = await this.api.listUsersPages();
       userPageCount = userPageList.length;
       if (userPageList.length > 0) {
@@ -207,6 +250,10 @@ export class AirtableSyncService {
       }
     } catch (e) {
       usersError = e instanceof Error ? e.message : String(e);
+      await this.trace(
+        `Users: GET /users failed (may require extra scopes or enterprise): ${usersError}`,
+        'warn',
+      );
       this.log.warn(
         `GET /users failed (may require extra scopes or enterprise): ${usersError}`,
       );
@@ -220,6 +267,12 @@ export class AirtableSyncService {
       userPageCount = 1;
     }
 
+    await this.trace(
+      usersError
+        ? `Users: finished with warning — ${userPageCount} page(s)`
+        : `Users: done — ${userPageCount} page(s)`,
+      usersError ? 'warn' : 'info',
+    );
     return {
       userPages: userPageCount,
       usersError,
@@ -227,13 +280,14 @@ export class AirtableSyncService {
   }
 
   /** Full sync: replace all page collections, follow Airtable pagination everywhere. */
-  async syncAll(): Promise<SyncSummary> {
+  async syncAll(opts: FullSyncOptions = {}): Promise<SyncSummary> {
+    await this.trace('Full sync started');
     const bases = await this.syncBasesOnly();
     const tables = await this.syncTablesOnly();
     const records = await this.syncRecordsOnly();
     const users = await this.syncUsersOnly();
 
-    return {
+    const summary: SyncSummary = {
       basePages: bases.basePages,
       tablePages: tables.tablePages,
       recordPages: records.recordPages,
@@ -242,5 +296,37 @@ export class AirtableSyncService {
       tablesSynced: records.tablesSynced,
       usersError: users.usersError,
     };
+
+    if (opts.includeRevisionHistory) {
+      try {
+        summary.revisionHistory = await this.revision.syncRevisionHistory({
+          maxRecords: opts.revisionMaxRecords,
+          delayMs: opts.revisionDelayMs,
+        });
+        await this.trace(
+          `Revision history after full sync: ${JSON.stringify(summary.revisionHistory)}`,
+        );
+      } catch (e: unknown) {
+        let msg: string;
+        if (e instanceof HttpException) {
+          const r = e.getResponse();
+          msg = typeof r === 'string' ? r : JSON.stringify(r);
+        } else if (e instanceof Error) {
+          msg = e.message;
+        } else {
+          msg = String(e);
+        }
+        summary.revisionHistoryError = msg;
+        await this.trace(
+          `Revision history not run after full sync: ${msg}`,
+          'warn',
+        );
+      }
+    }
+
+    await this.trace(
+      `Full sync finished — bases ${bases.bases}, tables ${records.tablesSynced}, record pages ${records.recordPages}, user pages ${users.userPages}${opts.includeRevisionHistory ? ', revision requested' : ''}`,
+    );
+    return summary;
   }
 }
