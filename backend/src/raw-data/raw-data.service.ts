@@ -96,6 +96,26 @@ function collectFieldNames(rows: Record<string, string>[]): string[] {
   return [...out, ...rest];
 }
 
+type SortDirection = 'asc' | 'desc';
+
+function compareStringValues(a: string, b: string, dir: SortDirection): number {
+  const cmp = a.localeCompare(b, undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  });
+  return dir === 'asc' ? cmp : -cmp;
+}
+
+function sortRowsByField(
+  rows: Record<string, string>[],
+  field: string,
+  dir: SortDirection,
+): Record<string, string>[] {
+  return [...rows].sort((left, right) =>
+    compareStringValues(left[field] ?? '', right[field] ?? '', dir),
+  );
+}
+
 function collectBaseNamesFromPages(
   pages: Array<{ payload: Record<string, unknown> }>,
 ): Map<string, string> {
@@ -274,6 +294,8 @@ export class RawDataService {
     baseId: string,
     tableId: string,
     limit: number,
+    sortField?: string,
+    sortDir: SortDirection = 'asc',
   ): Promise<{
     fields: string[];
     rows: Record<string, string>[];
@@ -289,22 +311,24 @@ export class RawDataService {
       const recs = p.payload?.records;
       totalRecords += Array.isArray(recs) ? recs.length : 0;
     }
-    const cap = Math.min(Math.max(1, limit), MAX_RAW_DOCUMENTS);
-    const rows: Record<string, string>[] = [];
-    outer: for (const p of pages) {
+    const allRows: Record<string, string>[] = [];
+    for (const p of pages) {
       const recs = p.payload?.records;
       if (!Array.isArray(recs)) {
         continue;
       }
       for (const r of recs) {
-        if (rows.length >= cap) {
-          break outer;
-        }
         if (r && typeof r === 'object') {
-          rows.push(airtableApiRecordToRow(r as Record<string, unknown>));
+          allRows.push(airtableApiRecordToRow(r as Record<string, unknown>));
         }
       }
     }
+    const cap = Math.min(Math.max(1, limit), MAX_RAW_DOCUMENTS);
+    const normalizedSortField = sortField?.trim();
+    const sortedRows = normalizedSortField
+      ? sortRowsByField(allRows, normalizedSortField, sortDir)
+      : allRows;
+    const rows = sortedRows.slice(0, cap);
     const fields = collectFieldNames(rows);
     return {
       fields,
@@ -318,6 +342,8 @@ export class RawDataService {
     integrationId: string,
     collectionName: string,
     limit: number,
+    sortField?: string,
+    sortDir: SortDirection = 'asc',
   ): Promise<{
     fields: string[];
     rows: Record<string, string>[];
@@ -331,6 +357,8 @@ export class RawDataService {
         parsed.baseId,
         parsed.tableId,
         limit,
+        sortField,
+        sortDir,
       );
     }
 
@@ -341,7 +369,14 @@ export class RawDataService {
     const coll = db.collection(collectionName);
     const cap = Math.min(Math.max(1, limit), MAX_RAW_DOCUMENTS);
     const totalInDb = await coll.estimatedDocumentCount();
-    const cursor = coll.find({}).limit(cap);
+    const normalizedSortField = sortField?.trim();
+    const sortOrder = sortDir === 'desc' ? -1 : 1;
+    const cursor = normalizedSortField
+      ? coll
+          .find({})
+          .sort({ [normalizedSortField]: sortOrder })
+          .limit(cap)
+      : coll.find({}).limit(cap);
     const docs = await cursor.toArray();
     const rows = docs.map((d) =>
       rowForGrid(d as unknown as Record<string, unknown>),

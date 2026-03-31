@@ -30,6 +30,8 @@ export class RawDataController {
     @Query('integrationId') integrationId: string,
     @Query('collection') collection: string,
     @Query('limit') limitStr?: string,
+    @Query('sortField') sortField?: string,
+    @Query('sortDir') sortDir?: string,
   ) {
     if (!integrationId?.trim() || !collection?.trim()) {
       throw new BadRequestException(
@@ -38,15 +40,22 @@ export class RawDataController {
     }
     const parsed = limitStr ? Number.parseInt(limitStr, 10) : MAX_RAW_DOCUMENTS;
     const limit = Number.isFinite(parsed) ? parsed : MAX_RAW_DOCUMENTS;
+    const normalizedSortField = sortField?.trim() || undefined;
+    const normalizedSortDir =
+      sortDir?.trim().toLowerCase() === 'desc' ? 'desc' : 'asc';
     const data = await this.rawData.fetchCollectionRows(
       integrationId,
       collection,
       limit,
+      normalizedSortField,
+      normalizedSortDir,
     );
     return {
       integrationId,
       collection,
       maxFetched: MAX_RAW_DOCUMENTS,
+      sortField: normalizedSortField ?? null,
+      sortDir: normalizedSortDir,
       ...data,
     };
   }

@@ -8,6 +8,7 @@ export default registerAs('airtable', () => ({
     process.env.AIRTABLE_OAUTH_SCOPES ?? 'schema.bases:read data.records:read',
   oauthSuccessRedirect:
     process.env.AIRTABLE_OAUTH_SUCCESS_REDIRECT ?? 'http://localhost:4200',
-  webHost: process.env.AIRTABLE_WEB_HOST ?? 'https://airtable.com',
+  /** Prefer www — apex redirects and cookie jar paths differ from logged-in sessions. */
+  webHost: process.env.AIRTABLE_WEB_HOST ?? 'https://www.airtable.com',
   apiBase: process.env.AIRTABLE_API_BASE ?? 'https://api.airtable.com/v0',
 }));

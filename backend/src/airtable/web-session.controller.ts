@@ -30,9 +30,42 @@ export class AirtableWebSessionController {
           'cookieHeader must look like real browser cookies (name=value; …). Copy the full Cookie header from DevTools while logged into airtable.com.',
       };
     }
-    await this.session.setCookieHeader(body.cookieHeader);
     const ok = await this.session.validateCookies(body.cookieHeader);
+    if (!ok) {
+      return {
+        ok: false,
+        valid: false,
+        error: 'COOKIE_NOT_VALID',
+        message: COOKIE_NOT_VALID_MESSAGE,
+      };
+    }
+    await this.session.setCookieHeader(body.cookieHeader);
     return { ok: true, valid: ok };
+  }
+
+  /**
+   * Launches browser and captures Airtable cookies automatically.
+   * You can preload a table URL to reuse an existing logged-in browser profile.
+   */
+  @Post('cookies/auto')
+  async autoCookies(
+    @Body()
+    body?: {
+      timeoutMs?: number;
+      preloadUrl?: string;
+      browser?: 'chrome' | 'brave';
+    },
+  ) {
+    const timeoutMs =
+      typeof body?.timeoutMs === 'number' && Number.isFinite(body.timeoutMs)
+        ? body.timeoutMs
+        : undefined;
+    const result = await this.session.autoCaptureCookies({
+      timeoutMs,
+      preloadUrl: body?.preloadUrl,
+      browser: body?.browser,
+    });
+    return { ok: true, ...result };
   }
 
   /**

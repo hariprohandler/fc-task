@@ -111,6 +111,7 @@
           [defaultColDef]="defaultColDef"
           [gridOptions]="gridOptions"
           (gridReady)="onGridReady($event)"
+          (sortChanged)="onSortChanged($event)"
         />
       </div>
       @if (dataFields.length > 0) {

@@ -13,6 +13,7 @@ import type {
   ColDef,
   GridApi,
   GridReadyEvent,
+  SortChangedEvent,
 } from 'ag-grid-community';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -70,6 +71,8 @@ export class RawDataComponent implements OnInit {
   columnVisibility: Record<string, boolean> = {};
   columnDefs: ColDef[] = [];
   rowData: Record<string, string>[] = [];
+  backendSortField: string | null = null;
+  backendSortDir: 'asc' | 'desc' = 'asc';
 
   readonly defaultColDef: ColDef = {
     sortable: true,
@@ -180,6 +183,8 @@ export class RawDataComponent implements OnInit {
     this.statusLine = '';
     this.searchText = '';
     this.gridApi?.setGridOption('quickFilterText', '');
+    this.backendSortField = null;
+    this.backendSortDir = 'asc';
     this.selectedRowCount = 0;
   }
 
@@ -211,7 +216,10 @@ export class RawDataComponent implements OnInit {
     this.loading = true;
     this.error = null;
     this.rawDataApi
-      .rows(this.selectedIntegrationId, coll)
+      .rows(this.selectedIntegrationId, coll, {
+        sortField: this.backendSortField ?? undefined,
+        sortDir: this.backendSortDir,
+      })
       .subscribe({
         next: (res) => {
           this.loading = false;
@@ -268,6 +276,7 @@ export class RawDataComponent implements OnInit {
       field,
       headerName: field,
       hide: !this.columnVisibility[field],
+      sort: this.backendSortField === field ? this.backendSortDir : null,
     }));
     return [indexCol, ...dataCols];
   }
@@ -287,6 +296,20 @@ export class RawDataComponent implements OnInit {
     event.api.addEventListener('paginationChanged', () => {
       this.cdr.markForCheck();
     });
+  }
+
+  onSortChanged(event: SortChangedEvent): void {
+    const sortModel = event.api.getColumnState().find((c) => c.sort != null);
+    const nextField = sortModel?.colId && sortModel.colId !== '__idx' ? sortModel.colId : null;
+    const nextDir = sortModel?.sort === 'desc' ? 'desc' : 'asc';
+    const hasChanged =
+      this.backendSortField !== nextField || this.backendSortDir !== nextDir;
+    if (!hasChanged) {
+      return;
+    }
+    this.backendSortField = nextField;
+    this.backendSortDir = nextDir;
+    this.refreshGrid();
   }
 
   onSearchInput(): void {

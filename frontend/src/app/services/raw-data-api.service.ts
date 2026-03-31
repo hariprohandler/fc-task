@@ -27,6 +27,8 @@ export interface RowsResponse {
   truncated: boolean;
   collection: string;
   maxFetched: number;
+  sortField?: string | null;
+  sortDir?: 'asc' | 'desc';
 }
 
 export interface RawLogEventDto {
@@ -57,9 +59,21 @@ export class RawDataApiService {
     });
   }
 
-  rows(integrationId: string, collection: string) {
+  rows(
+    integrationId: string,
+    collection: string,
+    options?: { sortField?: string; sortDir?: 'asc' | 'desc' },
+  ) {
+    let params = new HttpParams()
+      .set('integrationId', integrationId)
+      .set('collection', collection);
+    if (options?.sortField?.trim()) {
+      params = params
+        .set('sortField', options.sortField.trim())
+        .set('sortDir', options.sortDir ?? 'asc');
+    }
     return this.http.get<RowsResponse>('/api/raw-data/rows', {
-      params: { integrationId, collection },
+      params,
     });
   }
 
